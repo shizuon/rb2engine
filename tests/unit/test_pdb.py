@@ -294,6 +294,7 @@ def _track_row(
     rating: int = 0,
     comment: str = "",
     filename: str | None = None,
+    analyze_path: str = "",
 ) -> bytes:
     """Minimal track_row with string-offset table; file_path at index 20."""
     if filename is None:
@@ -302,6 +303,7 @@ def _track_row(
     # Fixed header through rating: 94 bytes, then 21 × u2 offsets.
     # Place all strings after the offset table (94 + 42 = 136).
     strings = [""] * 21
+    strings[14] = analyze_path
     strings[16] = comment
     strings[17] = title
     strings[19] = filename

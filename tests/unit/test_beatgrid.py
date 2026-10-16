@@ -291,6 +291,29 @@ class TestDownbeatAlignment:
     alignment surviving the -4 renumber.
     """
 
+    @pytest.mark.parametrize("first_beat_in_bar", [1, 2, 3, 4])
+    @pytest.mark.parametrize("sample_rate", [44100, 48000])
+    @pytest.mark.parametrize("start_sample", [0, 12345])
+    def test_pickup_preserves_source_bar_phase_and_beat_times(
+        self, first_beat_in_bar: int, sample_rate: int, start_sample: int
+    ) -> None:
+        """The first stored beat can be a pickup, not the bar's downbeat."""
+        src = _dense_constant(
+            120.0, 32, sample_rate=sample_rate, start_sample=start_sample,
+            first_beat_in_bar=first_beat_in_bar,
+        )
+        total = src.beats[-1].sample_offset + sample_rate
+        markers = _markers(compress_beatgrid(src, sample_rate=sample_rate, total_samples=total))
+
+        assert markers[0].beat_number == -4
+        assert markers[-1].sample_offset > total
+        for index, beat in enumerate(src.beats):
+            engine_index = index + first_beat_in_bar - 1
+            assert (engine_index % 4 == 0) == (beat.beat_in_bar == 1)
+            assert _reconstructed_sample(markers, engine_index) == pytest.approx(
+                beat.sample_offset, abs=1.0
+            )
+
     def test_downbeats_land_on_mod4_after_normalize(self) -> None:
         bpm = 128.0
         n = 16

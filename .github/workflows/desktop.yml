@@ -69,7 +69,7 @@ jobs:
           import os
           from pathlib import Path
           from tests.desktop_fixture import make_drive
-          make_drive(Path(os.environ['RUNNER_TEMP']) / '演出 USB #1 100%', tone=True)
+          make_drive(Path(os.environ['RUNNER_TEMP']) / '演出 USB #1 100%', tone=True, analysis=True)
           PY
       - name: Include signed Microsoft WebView2 bootstrapper
         if: runner.os == 'Windows'
@@ -132,6 +132,17 @@ jobs:
           $result = Get-Content $out -Raw | ConvertFrom-Json
           if (!$result.ok -or $process.ExitCode -ne 0) { throw 'OpenKeyScan smoke failed' }
           if ((Get-FileHash "$drive/Contents/test.wav" -Algorithm SHA256).Hash -ne $before) { throw 'Audio changed' }
+      - name: Check downbeat and Cue preservation from packaged conversion
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tests.desktop_fixture import check_analysis
+          result = check_analysis(Path(os.environ['RUNNER_TEMP']) / '演出 USB #1 100%')
+          print(json.dumps(result))
+          (Path(os.environ['RUNNER_TEMP']) / 'analysis-smoke.json').write_text(json.dumps(result))
+          PY
       - name: Collect licenses and archive
         shell: bash
         run: |
@@ -148,4 +159,5 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-smoke.json
             ${{ runner.temp }}/keyscan-smoke.json
+            ${{ runner.temp }}/analysis-smoke.json
             build/desktop/warn-desktop.txt

@@ -12,7 +12,7 @@ from rb2engine.desktop.app import render_html
 from rb2engine.desktop.service import DesktopService, discover_drives
 from rb2engine.errors import FatalError
 from rb2engine.writer import build as writer
-from tests.desktop_fixture import make_drive
+from tests.desktop_fixture import check_analysis, make_drive
 
 
 def wait(service: DesktopService) -> dict:
@@ -74,6 +74,20 @@ def test_confirmation_and_failed_inspection_invalidate_target(drive: Path) -> No
     assert state["summary"] is None
     assert service.convert_drive(True, True, True)["error"] == "inspect_first"
     assert not (drive / "Engine Library").exists()
+
+
+def test_optional_analysis_and_pickup_reach_written_database(tmp_path: Path) -> None:
+    drive = make_drive(tmp_path / "pickup export", analysis=True)
+    before = manifest(drive)
+    service = DesktopService()
+    assert service.inspect_drive(str(drive))["ok"]
+    assert wait(service)["status"] == "ready"
+    assert service.convert_drive(False, True, False)["ok"]
+    assert wait(service)["status"] in ("complete", "warning")
+    assert check_analysis(drive)["downbeat_seconds"] == 1.25
+    assert service.verify_drive()["ok"]
+    assert wait(service)["status"] == "verified"
+    assert manifest(drive) == before
 
 
 def test_export_change_requires_reinspection(drive: Path) -> None:

@@ -298,7 +298,7 @@ def test_pqtz_beats_converted_to_samples_at_given_rate(tmp_path: Path) -> None:
 
 
 def test_pqt2_presence_sets_is_adjusted(tmp_path: Path) -> None:
-    """PQT2 presence is rekordbox's own record of an extended/edited grid (E7)."""
+    """Keep the legacy presence flag; this does not prove a manual grid edit."""
     dat = _write(tmp_path / "x.DAT", _pmai([_pqtz([(1, 12000, 0), (2, 12000, 500)])]))
     ext = _write(tmp_path / "x.EXT", _pmai([_pqt2_minimal(0)]))
 
@@ -306,6 +306,43 @@ def test_pqt2_presence_sets_is_adjusted(tmp_path: Path) -> None:
     assert grid is not None
     assert grid.is_adjusted is True
     assert len(grid.beats) == 2  # positions still from PQTZ
+
+
+@pytest.mark.parametrize("problem", ["variant_2", "variant_0", "missing_entries"])
+def test_optional_pqt2_failure_preserves_grid_and_later_cues(
+    tmp_path: Path, problem: str
+) -> None:
+    """An unsupported optional body must not erase valid neighboring tags."""
+    dat_bytes = _pmai([_pqtz([(3, 12000, 100), (4, 12000, 600), (1, 12000, 1100)])])
+    pqt2 = bytearray(_pqt2_minimal())
+    if problem.startswith("variant"):
+        struct.pack_into(">I", pqt2, 16, 0x02000002 if problem == "variant_2" else 2)
+    else:
+        struct.pack_into(">I", pqt2, 40, 2)
+    ext_bytes = _pmai([bytes(pqt2), _pco2(1, [_pcp2(1, 1100, comment="Downbeat")])])
+    dat = _write(tmp_path / "x.DAT", dat_bytes)
+    ext = _write(tmp_path / "x.EXT", ext_bytes)
+
+    grid, cues, warnings = read_anlz(dat, ext, 48000)
+
+    assert grid is not None
+    assert [beat.sample_offset for beat in grid.beats] == [4800, 28800, 52800]
+    assert [beat.beat_in_bar for beat in grid.beats] == [3, 4, 1]
+    assert len(cues) == 1
+    assert cues[0].start_sample == 52800
+    assert cues[0].name == "Downbeat"
+    assert any(warning.startswith("pqt2_ignored:x.EXT:") for warning in warnings)
+    assert dat.read_bytes() == dat_bytes
+    assert ext.read_bytes() == ext_bytes
+
+
+def test_pqt2_broken_envelope_is_not_silently_skipped(tmp_path: Path) -> None:
+    """A tag that overlaps the following cue cannot be recovered by guessing."""
+    pqt2 = bytearray(_pqt2_minimal())
+    struct.pack_into(">I", pqt2, 8, 10000)
+    ext = _write(tmp_path / "x.EXT", _pmai([bytes(pqt2), _pco2(1, [_pcp2(1, 1100)])]))
+    with pytest.raises(TrackSkipped, match="PQT2:truncated"):
+        read_anlz(None, ext, 44100)
 
 
 def test_no_grid_returns_none(tmp_path: Path) -> None:

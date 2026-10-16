@@ -540,6 +540,51 @@ def _wrap_apic_v24(body: bytes) -> bytes:
     return b"APIC" + _syncsafe(len(body)) + b"\x00\x00" + body
 
 
+@pytest.mark.parametrize("major", [2, 3, 4])
+@pytest.mark.parametrize("bad_first", [False, True])
+def test_invalid_front_cover_does_not_hide_usable_picture(
+    tmp_path: Path, major: int, bad_first: bool
+) -> None:
+    """A URL masquerading as the front image must not discard a real JPEG."""
+    from rb2engine.reader.artwork import extract_artwork, read_artwork_bytes
+
+    pictures = [(0, _JPEG_1X1), (3, b"https://example.invalid/cover.jpg")]
+    if bad_first:
+        pictures.reverse()
+    frames = []
+    for picture_type, data in pictures:
+        if major == 2:
+            frame = _id3v22_pic_frame(data, pic_type=picture_type, fmt=b"JPG")
+        else:
+            body = _apic_body(data, encoding=0, pic_type=picture_type)
+            size = _syncsafe(len(body)) if major == 4 else _be32(len(body))
+            frame = b"APIC" + size + b"\x00\x00" + body
+        frames.append(frame)
+    original = _build_id3v2(major=major, frames=frames)
+    path = tmp_path / "fallback.mp3"
+    path.write_bytes(original)
+
+    assert embedded_cover_bytes(path) == _JPEG_1X1
+    art = extract_artwork(path)
+    assert art is not None
+    assert read_artwork_bytes(art) == _JPEG_1X1
+    assert path.read_bytes() == original
+
+
+def test_all_invalid_cover_candidates_still_report_corruption(tmp_path: Path) -> None:
+    """Fallback must not turn unrecognizable bytes into a published image."""
+    from rb2engine.reader.artwork import extract_artwork
+
+    frames = [
+        _wrap_apic_v24(_apic_body(b"not an image", encoding=0, pic_type=0)),
+        _wrap_apic_v24(_apic_body(b"https://example.invalid", encoding=0, pic_type=3)),
+    ]
+    path = tmp_path / "invalid.mp3"
+    path.write_bytes(_build_id3v2(major=4, frames=frames))
+    with pytest.warns(UserWarning, match="undecodable/corrupt image"):
+        assert extract_artwork(path) is None
+
+
 def test_apic_utf16be_description_not_single_nul(tmp_path: Path) -> None:
     """Encoding 2 (UTF-16BE): desc 'A' is 00 41 — single-NUL would mis-split.
 

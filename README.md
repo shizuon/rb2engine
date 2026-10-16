@@ -4,12 +4,14 @@
 [![Release](https://img.shields.io/github/v/release/shizuon/rb2engine)](https://github.com/shizuon/rb2engine/releases)
 
 This fork builds on [J.R. Gutierrez's rb2engine](https://github.com/jrgutier/rb2engine).
-Version 0.7.0 adds a Chinese/English desktop app, optional missing-key analysis
-through OpenKeyScan, and bundled Windows/macOS overview waveform completion.
+Version 0.7.1 preserves downbeat numbering for pickup beats and recovers usable
+grids, cues and cover images when optional metadata is malformed. The desktop
+app includes optional missing-key analysis through OpenKeyScan and bundled
+Windows/macOS overview waveform completion.
 It retains the conversion and native overview work from
 [the previous fork](https://github.com/Last-Xuan-ai/rb2engine).
 Download the Windows x64 or macOS Apple Silicon ZIP from
-[the v0.7.0 release](https://github.com/shizuon/rb2engine/releases/tag/v0.7.0);
+[the v0.7.1 release](https://github.com/shizuon/rb2engine/releases/tag/v0.7.1);
 Python and the waveform runtime are included. See [Desktop app](docs/desktop.md).
 The upstream PyPI package remains separately maintained; install this fork from its
 [GitHub releases](https://github.com/shizuon/rb2engine/releases) or source.
@@ -74,7 +76,7 @@ audio copy. The fork's overview evidence is reported separately below.
 ## Install
 
 ```bash
-python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@v0.7.0"
+python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@v0.7.1"
 ```
 
 Requires Python 3.11+. Base conversion works on macOS, Windows and Linux. The
@@ -85,7 +87,7 @@ on Apple Silicon macOS; bundled-runtime checks do not establish every-song or
 physical-player parity on every platform.
 
 To install from a release artifact, download the wheel from this fork's Releases
-page and run `python -m pip install /path/to/rb2engine-0.7.0-py3-none-any.whl`.
+page and run `python -m pip install /path/to/rb2engine-0.7.1-py3-none-any.whl`.
 
 From source:
 
@@ -176,7 +178,7 @@ Install the extra plus external tools first; macOS needs Xcode Command Line Tool
 FFmpeg and pkg-config. See [complete setup and commands](docs/waveforms.md).
 
 ```bash
-python -m pip install "rb2engine[waveforms] @ git+https://github.com/shizuon/rb2engine.git@v0.7.0"
+python -m pip install "rb2engine[waveforms] @ git+https://github.com/shizuon/rb2engine.git@v0.7.1"
 brew install ffmpeg pkgconf
 rb2engine waveforms doctor
 
