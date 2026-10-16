@@ -185,6 +185,7 @@ class ProvenanceRecord:
     max_playlist_id: int
     max_playlist_entity_id: int
     key_analysis_sha256: str | None = None
+    grid_repair_sha256: str | None = None
 
 
 @dataclass
@@ -247,6 +248,7 @@ class ConversionReport:
     # fingerprint, e.g. libraries not parsed from a pdb, or on fatal runs).
     provenance: ProvenanceRecord | None = None
     key_analysis: dict[str, Any] | None = None
+    grid_repair: dict[str, Any] | None = None
 
     def add_skip(
         self,
@@ -323,6 +325,7 @@ class ConversionReport:
             },
             "path_base": self.path_base,
             "key_analysis": self.key_analysis,
+            "grid_repair": self.grid_repair,
             "fatal": self.fatal,
             "fatal_message": self.fatal_message,
             "provenance": (
@@ -360,6 +363,18 @@ class ConversionReport:
             f"Unknown page types:{c.unknown_page_type_encounters}",
             f"exportExt.pdb:     {'yes' if c.export_ext_present else 'no'}",
         ]
+        if self.grid_repair is not None:
+            grid = self.grid_repair
+            lines.append(f"Grid repair ({grid['mode']}): {grid['corrected']} corrected, "
+                         f"{grid['unchanged']} already aligned, {grid['skipped']} skipped, "
+                         f"{grid['failed']} failed. Original grids retained.")
+            for row in grid["tracks"]:
+                detail = f"  Track {row['track_id']}: {row['status']} ({row['reason']})"
+                if row["status"] == "corrected":
+                    detail += (f" {row['time_shift_ms']:+.1f} ms, "
+                               f"bar phase +{row['bar_phase_shift']}, "
+                               f"supporting passages {row['supporting_windows']}")
+                lines.append(detail)
         if self.path_base is not None:
             lines.append(f"path_base:         {self.path_base}")
         if self.fatal:

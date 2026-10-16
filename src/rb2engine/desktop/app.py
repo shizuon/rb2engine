@@ -22,11 +22,11 @@ def render_html() -> str:
 
 def _smoke(
     window: Any, service: DesktopService, output: Path, drive: str | None, analyze: bool,
-    waveforms: bool = False,
+    waveforms: bool = False, grid_mode: str | None = None,
 ) -> None:
     """Packaged-app smoke: real renderer, bridge, DOM buttons and converter."""
     result: dict[str, Any] = {"ok": False}
-    deadline = time.monotonic() + (210 if analyze or waveforms else 80)
+    deadline = time.monotonic() + (360 if grid_mode else 210 if analyze or waveforms else 80)
     try:
         while not window.evaluate_js("Boolean(window.rb2engineReady)"):
             if time.monotonic() > deadline:
@@ -34,6 +34,15 @@ def _smoke(
             time.sleep(0.1)
         result["renderer"] = window.evaluate_js("navigator.userAgent")
         result["title"] = window.evaluate_js("document.title")
+        assert not window.evaluate_js("document.querySelector('#repair-grid').checked")
+        assert window.evaluate_js("document.querySelector('#grid-options').hidden")
+        assert window.evaluate_js("document.querySelector('#grid-mode').value") == "strict"
+        if grid_mode:
+            window.evaluate_js(
+                "document.querySelector('#repair-grid').click();"
+                f"document.querySelector('#grid-mode').value={json.dumps(grid_mode)};"
+            )
+            assert not window.evaluate_js("document.querySelector('#grid-options').hidden")
         assert window.evaluate_js("document.querySelector('#keyscan-help').hidden")
         installed = bool(service.get_keyscan()["path"])
         window.evaluate_js("document.querySelector('#fill-keys').click();")
@@ -73,6 +82,14 @@ def _smoke(
             if service.get_state()["status"] != "verified":
                 raise RuntimeError(service.get_state()["details"])
             result["conversion"] = service.get_state()["result"]
+            if grid_mode:
+                grid = result["conversion"]["grid_repair"]
+                assert grid["mode"] == grid_mode and grid["runtime"] == "onnxruntime"
+                assert grid["corrected"] == 1 and grid["failed"] == 0, grid
+                row = grid["tracks"][0]
+                assert -100 <= row["time_shift_ms"] <= -50, row
+                assert row["bar_phase_shift"] == 2, row
+                result["grid_repair"] = grid
             if waveforms:
                 import subprocess
                 import tempfile
@@ -149,6 +166,7 @@ def main() -> None:
     parser.add_argument("--smoke-drive", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-analyzer", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-waveforms", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-grid", choices=("strict", "majority"), help=argparse.SUPPRESS)
     args = parser.parse_args()
     if sys.platform == "win32":
         log_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "rb2engine"
@@ -169,7 +187,7 @@ def main() -> None:
             service._analyzer_path = str(resolve_analyzer(args.smoke_analyzer))
         window = webview.create_window(
             "rb2engine", html=render_html(), js_api=service,
-            width=660, height=470, min_size=(520, 400), background_color="#f7f8f4",
+            width=660, height=530, min_size=(520, 450), background_color="#f7f8f4",
             text_select=True,
         )
         if window is None:
@@ -181,7 +199,8 @@ def main() -> None:
         if args.smoke_test:
             webview.start(
                 _smoke, (window, service, args.smoke_test, args.smoke_drive,
-                         bool(args.smoke_analyzer), args.smoke_waveforms), **options,
+                         bool(args.smoke_analyzer), args.smoke_waveforms, args.smoke_grid),
+                **options,
             )
             if not json.loads(args.smoke_test.read_text(encoding="utf-8"))["ok"]:
                 raise SystemExit(1)

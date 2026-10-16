@@ -20,6 +20,10 @@ licenses = bundle / ('Contents/Resources/licenses' if sys.platform == 'darwin' e
 licenses.mkdir(parents=True, exist_ok=True)
 for source in ('LICENSE', 'NOTICE'):
     shutil.copy2(root / source, licenses / source)
+model_license = licenses / 'BeatThis'
+model_license.mkdir(exist_ok=True)
+for source in ('LICENSE', 'manifest.json'):
+    shutil.copy2(root / 'src/rb2engine/gridrepair/assets' / source, model_license / source)
 ffmpeg_license = licenses / 'FFmpeg'
 ffmpeg_license.mkdir(exist_ok=True)
 for source in ('COPYING.LGPLv2.1', 'LICENSE.md', 'config.h', 'config.mak'):

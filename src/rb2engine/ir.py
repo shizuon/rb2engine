@@ -98,6 +98,8 @@ class SourceTrack:
     Defaulted and last so existing constructions stay valid; a dataclass field
     with a default may not precede fields without one.
     """
+    adjusted_beatgrid: SourceBeatgrid | None = None
+    """Optional model-assisted grid; original beatgrid remains the default grid."""
 
 
 @dataclass(frozen=True, slots=True)

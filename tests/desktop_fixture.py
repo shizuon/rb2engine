@@ -18,13 +18,15 @@ from tests.unit.test_pdb import (
 )
 
 
-def make_drive(root: Path, *, tone: bool = False, analysis: bool = False) -> Path:
+def make_drive(
+    root: Path, *, tone: bool = False, analysis: bool = False, duration: int | None = None,
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "PIONEER" / "rekordbox").mkdir(parents=True, exist_ok=True)
     (root / "PIONEER" / "USBANLZ").mkdir(exist_ok=True)
     (root / "Contents").mkdir(exist_ok=True)
     audio = root / "Contents" / "test.wav"
-    duration = 30 if tone else 4 if analysis else 1
+    duration = duration if duration is not None else 30 if tone else 4 if analysis else 1
     with wave.open(str(audio), "wb") as stream:
         stream.setnchannels(2)
         stream.setsampwidth(2)

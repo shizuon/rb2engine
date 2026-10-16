@@ -2,7 +2,7 @@
 import sys
 from importlib.metadata import version
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 root = Path(SPECPATH).parent
 runtime = root / 'build' / 'native-runtime'
@@ -13,7 +13,7 @@ if not native_binaries:
 analysis = Analysis(
     [str(root / 'packaging' / 'desktop_entry.py')],
     pathex=[str(root / 'src')],
-    binaries=native_binaries,
+    binaries=native_binaries + collect_dynamic_libs('onnxruntime'),
     datas=collect_data_files('rb2engine', include_py_files=True),
     hiddenimports=['webview'],
     hookspath=[],

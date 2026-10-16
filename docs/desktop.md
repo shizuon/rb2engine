@@ -129,3 +129,15 @@ Build on the target operating system. On Windows, run the native build in an
 MSYS2 UCRT64 environment with GCC, make, pkgconf and nasm installed. The workflow packages the result and
 uploads its SHA-256 file plus separate native-renderer smoke evidence.
 The desktop dependency is optional; ordinary CLI installs do not require it.
+
+## Experimental grid repair
+
+The **Try grid offset repair (experimental)** switch is off by default. When
+selected it shows **Strict** and **Relaxed**, with Strict selected initially.
+The CPU model runs offline and is included in both desktop downloads.
+It preserves BPM, cues, loops, audio and the source grid, and only changes an
+accepted beat-time offset/bar phase in the adjusted grid. Tracks without enough
+reliable evidence are retained. Reconvert with the switch off to restore the
+source grid; an existing database is backed up by desktop conversion.
+The report lists each outcome. See [grid alignment](grid-alignment.md) for the
+policy, runtime provenance and verification limits.

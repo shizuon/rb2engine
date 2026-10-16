@@ -1,6 +1,6 @@
 [project]
 name = "rb2engine"
-version = "0.7.2"
+version = "0.8.0"
 description = "Convert a rekordbox USB export into an Engine DJ library, in place, without duplicating your music"
 readme = "README.md"
 license = "MIT"
@@ -37,7 +37,8 @@ dependencies = [
 
 [project.optional-dependencies]
 waveforms = ["numpy>=1.26,<3"]  # BSD-3-Clause
-desktop = ["pywebview>=6.2.1,<7", "numpy>=1.26,<3"]
+grid-repair = ["numpy>=1.26,<3", "onnxruntime==1.24.4"]
+desktop = ["pywebview>=6.2.1,<7", "numpy>=1.26,<3", "onnxruntime==1.24.4"]
 
 [project.urls]
 Homepage = "https://github.com/shizuon/rb2engine"
@@ -74,7 +75,7 @@ packages = ["src/rb2engine"]
 # Keep the sdist lean: ship the package and its captured DDL, not the
 # multi-hundred-MB test corpus or local planning artifacts.
 include = ["src/rb2engine", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md",
-           "docs/desktop.md", "docs/grid-alignment.md", "docs/waveforms.md", "docs/waveform-validation.md",
+           "docs/desktop.md", "docs/grid-alignment.md", "packaging/export_grid_model.py", "docs/waveforms.md", "docs/waveform-validation.md",
            "docs/waveform-validation.json", "docs/integrated-waveform-validation.json"]
 
 [tool.pytest.ini_options]
@@ -149,7 +150,7 @@ strict = false
 # construct and pyrekordbox ship no type stubs / py.typed marker. Their absence
 # is a fact about upstream, not a defect here.
 [[tool.mypy.overrides]]
-module = ["construct.*", "pyrekordbox.*", "webview.*"]
+module = ["construct.*", "pyrekordbox.*", "webview.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

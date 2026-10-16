@@ -1,8 +1,9 @@
 # Beatgrid alignment and downbeat numbering
 
-rb2engine reads the source grid; it does not currently infer a new grid from
-audio. Correct overview waveforms therefore do not establish that the source
-beat times or bar labels are correct.
+By default rb2engine preserves the source grid. Version 0.8.0 adds an optional,
+experimental audio check that can shift a fixed-tempo grid and its bar phase.
+It does not infer a new tempo or create variable-tempo grids. Correct overview
+waveforms alone do not establish that source beat times or bar labels are correct.
 
 ## Conversion mechanism
 
@@ -58,34 +59,88 @@ PQTZ's whole-millisecond resolution is a different issue from an entire beat
 or bar being emphasized incorrectly. Optional PQT2 microsecond refinements are
 not enabled in 0.7.1.
 
-## Reusing BeatThis for audio-based checks
+## Optional grid repair (0.8.0)
 
-The earlier audio-analysis approach uses `beat-this` 1.1.0 with the `small0`
-checkpoint and `dbn=False`. The public model returns both beat timestamps and
-downbeat timestamps. Its
-[documented API](https://github.com/CPJKU/beat_this#python-class) accepts either
-an audio file (`File2Beats`) or decoded samples plus their rate (`Audio2Beats`).
+Enable **Try grid offset repair (experimental)** in the desktop app, then choose
+**Strict** (default) or **Relaxed**. The switch itself is off by default. The
+model is bundled, runs on the CPU offline, and does not require OpenKeyScan or
+PyTorch. Source/wheel users can install the `grid-repair` extra and provide
+FFmpeg/ffprobe (plus the existing AAC helper dependencies for AAC):
 
-That makes it suitable for an independent diagnostic, especially when the
-source application has already labelled the wrong downbeat. A basic onset
-detector alone cannot reliably decide which of four beats is the musical
-downbeat; the loudest attack or first audible event need not be beat 1.
+```sh
+python -m pip install "rb2engine[grid-repair] @ git+https://github.com/shizuon/rb2engine.git@v0.8.0"
+rb2engine convert /path/to/USB --repair-grid --grid-mode strict
+rb2engine convert /path/to/USB --repair-grid --grid-mode majority
+```
 
-A conservative fixed-tempo correction would:
+`--dry-run` never loads the model or analyzes audio. Default conversion does not
+load the model either. Verification replays the recorded shifts; it does not
+rerun inference. Source installs need the extra to verify a repaired library.
 
-1. Analyze a local audio copy in a defined sample clock and retain the original
-   PQTZ grid and file fingerprints.
-2. Compare several separated rhythmic passages. Estimate the global beat-time
-   offset separately from the bar-phase offset modulo four.
-3. Keep the source BPM when the evidence supports it. Flag tempo disagreement,
-   half/double ambiguity, weak intros and inconsistent downbeat predictions.
-4. Produce a reviewable shift proposal; use a bar-label shift when beat times
-   already align, and a time shift only when timing evidence supports it.
-5. Apply only an explicitly selected proposal with backup and readback checks.
-   Do not move cues, loops, audio or waveforms merely to match a new grid.
+### What changes
 
-Model agreement is evidence of consistency, not independent musical ground
-truth. A first output downbeat should never be treated as an automatically
-verified song start. Multiple passages and listening/visual review are still
-needed for an acceptance claim. No automatic BeatThis correction or heavyweight
-model runtime is included in this release.
+An accepted correction adds the same sample offset to every source beat and/or
+rotates the beat-within-bar labels. BPM, beat spacing, cues, loops, audio and
+waveforms are retained. The original grid remains in Engine's default grid;
+only the adjusted grid receives the correction. Reconvert with the switch off
+to restore the source grid. Desktop conversion backs up an existing database
+before rebuilding it. Do not rebuild after making Engine-only edits unless you
+intend to replace them with the source export.
+
+### Agreement policy
+
+The detector uses BeatThis 1.1.0 small0, exported to ONNX, with NumPy
+pre/postprocessing equivalent to upstream `dbn=False`. Its
+[upstream API](https://github.com/CPJKU/beat_this#python-class) outputs both beats
+and downbeats. License, checkpoint URL and file hashes travel with the model.
+The maintainer export script is `packaging/export_grid_model.py`.
+
+- Eligible tracks have a continuous 4/4, fixed-tempo source grid, at least 64
+  beats, a sample rate of 44.1 or 48 kHz and a fitted tempo of 55–215 BPM.
+  Nonlinear source timing or changing tempo/bar labels is skipped.
+- Audio must be 90 seconds to 90 minutes. Three separated, non-overlapping
+  passages of 30–45 seconds are decoded in the same sample clock as the
+  overview generator; the 3-second context edges are excluded from evidence.
+- Each usable passage needs at least 24 beats and 8 downbeats, at least 95%
+  of predicted beats within 40 ms of the shifted source, at least 90%
+  consecutive source-beat assignments and at least 90% support for one bar phase.
+- Strict requires all three usable passages to agree on the bar phase and have
+  inferred offsets within 20 ms. Relaxed requires any two, with identical
+  per-passage checks. All three are preferred when they agree; otherwise the
+  closest agreeing pair is used, with passage order as the tie-breaker.
+- The time shift cannot exceed 200 ms or 40% of a beat, whichever is smaller.
+  Shifts within 20 ms are left alone. Bar-phase correction can still apply.
+  This is a small-offset repair, not correction of whole-beat timing errors.
+
+Silence, weak intros/outros, ambiguous half/double tempo, insufficient evidence,
+conflicting passages and unsupported grids keep the source grid. Decoder errors
+are reported per track; missing/corrupt model components fail before publication.
+
+### Evidence and verification
+
+The JSON report records the selected mode, model/runtime identity, per-passage
+quality measures, supporting passages, source/audio hashes and each outcome:
+corrected, already aligned, skipped or failed. The publication journal binds the
+repair record by SHA-256. Before publication the source export and analyzed
+inputs are checked again. Verification checks both default and adjusted numbered
+grids and validates the recorded source grid and audio for corrected tracks.
+
+The NumPy/ONNX runtime matched the upstream PyTorch beat and downbeat arrays
+exactly on 12 local 45-second passages from six tracks. These are implementation
+parity checks, not an accuracy benchmark. On three-passage checks of those six
+tracks, Strict retained five and judged one already aligned; Relaxed retained
+two, judged three aligned and proposed an approximately +80.5 ms shift on one.
+That proposal has not been independently accepted as musical ground truth.
+A deliberately shifted variant of the aligned track was corrected by Strict
+by approximately -74.5 ms and two bar beats, against the injected +80 ms/two-beat
+error. The model's 20 ms frame resolution limits timing precision.
+
+An authored percussion/bass fixture with injected +80 ms and two-beat phase
+errors is also tested using the actual model, including the frozen desktop
+applications. It yields an approximately -70 ms correction and restores the
+bar phase. Deterministic policy tests cover both modes, conflicting/weak passages,
+source preservation, restoration, record tampering and adjusted-grid mutation.
+
+Model agreement establishes consistency, not musical truth. This remains an
+experimental feature; listening and inspection in Engine DJ/on the target deck
+are the separate acceptance step. No new variable-tempo analysis is enabled.

@@ -249,6 +249,10 @@ def _emit_report(
     help="Override JSON report path (default: Engine Library/rb2engine-report.json).",
 )
 @click.option("--no-artwork", is_flag=True, help="Skip album art extraction/writes.")
+@click.option("--repair-grid", is_flag=True,
+              help="Experimental: repair fixed-tempo grid offsets using offline beat detection.")
+@click.option("--grid-mode", type=click.Choice(["strict", "majority"]), default="strict",
+              show_default=True, help="Grid repair agreement: all 3 passages or any 2.")
 @click.pass_context
 def convert_cmd(
     ctx: click.Context,
@@ -259,6 +263,8 @@ def convert_cmd(
     target_schema: str | None,
     report_path: Path | None,
     no_artwork: bool,
+    repair_grid: bool,
+    grid_mode: str,
 ) -> None:
     """Convert a rekordbox USB export into an Engine Library on the same drive.
 
@@ -315,6 +321,14 @@ def convert_cmd(
                 f"{len(library.playlists)} playlists — nothing written"
             )
             ctx.exit(0)
+
+        if repair_grid:
+            from rb2engine.gridrepair.repair import repair_library, validate_inputs
+
+            library, report.grid_repair = repair_library(
+                library, mode=grid_mode, on_progress=progress,
+            )
+            validate_inputs(library, report.grid_repair)
 
         m_db = build_library(
             library,

@@ -116,6 +116,7 @@ class DesktopService:
     def convert_drive(
         self, artwork: bool, confirmed: bool, replace: bool, fill_keys: bool = False,
         fill_waveforms: bool = False,
+        repair_grid: bool = False, grid_mode: str = "strict",
     ) -> dict[str, Any]:
         with self._lock:
             if self._inspection is None:
@@ -128,7 +129,8 @@ class DesktopService:
             checked = dict(self._inspection)
             return self._start(
                 "convert",
-                lambda: self._convert(checked, artwork, replace, fill_keys, fill_waveforms),
+                lambda: self._convert(checked, artwork, replace, fill_keys, fill_waveforms,
+                                      repair_grid, grid_mode),
             )
 
     def fill_waveforms(self, confirmed: bool) -> dict[str, Any]:
@@ -216,6 +218,7 @@ class DesktopService:
     def _convert(
         self, checked: dict[str, Any], artwork: bool, replace: bool, fill_keys: bool,
         fill_waveforms: bool = False,
+        repair_grid: bool = False, grid_mode: str = "strict",
     ) -> None:
         root = Path(checked["path"])
         engine = root / "Engine Library"
@@ -248,6 +251,13 @@ class DesktopService:
                     self._inspection = None
                 self._update(summary=None)
                 raise FatalError("The export changed during key analysis. Inspect it again.")
+        if repair_grid:
+            from rb2engine.gridrepair.repair import repair_library, validate_inputs
+
+            library, report.grid_repair = repair_library(
+                library, mode=grid_mode, on_progress=self._progress,
+            )
+            validate_inputs(library, report.grid_repair)
         self._progress("building library", 0, 0)
         database = build_library(library, drive_root=root, report=report,
                                  with_artwork=artwork, on_progress=self._progress,
@@ -255,9 +265,13 @@ class DesktopService:
                                  target_schema=(3, 0, 2) if fill_waveforms else None)
         notices = list(library.warnings)
         analysis_text = ""
+        if report.grid_repair is not None:
+            grid = report.grid_repair
+            if grid["failed"]:
+                notices.append("Some grid checks failed; their original grids were retained.")
         if report.key_analysis is not None:
             analysis = report.key_analysis
-            analysis_text = f"\nOpenKeyScan: {len(analysis['tracks'])} missing keys filled.\n"
+            analysis_text += f"\nOpenKeyScan: {len(analysis['tracks'])} missing keys filled.\n"
             notices.extend(f"OpenKeyScan track {row['track_id']}: {row['error']}"
                            for row in analysis["failures"])
         if report.provenance is not None:
@@ -280,7 +294,8 @@ class DesktopService:
             summary["existing"] = True
         self._update(status="warning" if attention else "complete", summary=summary,
                      result={"database": str(database), "report": report_path,
-                             "counters": counters, "verified": None},
+                             "counters": counters, "verified": None,
+                             "grid_repair": report.grid_repair},
                      details=report.render_text() + analysis_text + "\n\n" + "\n".join(notices))
         if fill_waveforms:
             from rb2engine.desktop.waveforms import describe, fill
