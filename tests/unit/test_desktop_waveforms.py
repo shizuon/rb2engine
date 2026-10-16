@@ -80,6 +80,29 @@ def test_fill_existing_without_rebuild_and_retry_preserves_waveforms(
     assert manifest(drive) == original
 
 
+def test_reconversion_replaces_orphan_rgb_with_backup(converted, monkeypatch, tmp_path):
+    drive, service, database = converted
+    original = manifest(drive)
+    entry = cached_silence(drive / "Contents/test.wav", tmp_path / "cache")
+    monkeypatch.setattr(generator, "create_context", object)
+    monkeypatch.setattr(generator, "generate", lambda *_a, **_kw: entry)
+    service.fill_waveforms(True)
+    assert wait(service)["status"] == "waveforms_complete"
+    with pub.connect(database) as connection:
+        uid = pub.schema(connection)
+    rgb = pub.rgb_path(database, uid, 1)
+    # A rebuild retains the UUID and existing RGB files while creating empty
+    # DB waveform slots. Explicit reconversion must regenerate a coherent pair.
+    rgb.write_bytes(b"old RGB to preserve in backup")
+    service.convert_drive(False, True, True, False, True)
+    state = wait(service)
+    result = state["result"]["waveforms"]
+    assert result["generated"] == 1 and result["preserved"] == 0, state
+    assert rgb.read_bytes() != b"old RGB to preserve in backup"
+    assert (Path(result["batch"]) / "before-1.rgb").read_bytes() == b"old RGB to preserve in backup"
+    assert manifest(drive) == original
+
+
 def test_decoder_failure_keeps_converted_library(converted, monkeypatch):
     drive, service, database = converted
     original_db, original = database.read_bytes(), manifest(drive)

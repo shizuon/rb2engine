@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-def fill(database: Path, progress, *, context=None, cache_root=None) -> dict:
+def fill(database: Path, progress, *, context=None, cache_root=None, rebuilt=False) -> dict:
     from rb2engine.overviews import publication as pub
     from rb2engine.overviews._build import build_cache
     from rb2engine.overviews.generator import create_context, generate
@@ -29,7 +29,8 @@ def fill(database: Path, progress, *, context=None, cache_root=None) -> dict:
     failures: list[dict[str, Any]] = []
     pending, preserved = [], 0
     for row in rows:
-        if row["overviewWaveFormData"] or pub.rgb_path(database, uid, row["id"]).exists():
+        existing_rgb = pub.rgb_path(database, uid, row["id"]).exists()
+        if row["overviewWaveFormData"] or (existing_rgb and not rebuilt):
             # Never replace an existing Engine waveform, including a partial pair.
             preserved += 1
         else:
@@ -55,7 +56,8 @@ def fill(database: Path, progress, *, context=None, cache_root=None) -> dict:
     stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
     batch = database.parent.parent / "rb2engine-waveforms" / f"{stamp}-{uuid.uuid4().hex[:8]}"
     progress("writing waveforms", 0, len(entries))
-    pub.prepare(database, entries, batch, expected_fingerprint=baseline, empty_only=True)
+    pub.prepare(database, entries, batch, expected_fingerprint=baseline,
+                empty_only=True, replace_orphan_rgb=rebuilt)
     result["batch"] = str(batch)
     result["verified"] = pub.apply(batch)
     result["generated"] = len(entries)

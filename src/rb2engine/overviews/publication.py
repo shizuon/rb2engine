@@ -230,7 +230,8 @@ def validate_waveform(blob, kind, frames):
         raise ValueError("Waveform footer disagrees with channel data")
 
 
-def prepare(database, entries, destination, *, expected_fingerprint=None, empty_only=False):
+def prepare(database, entries, destination, *, expected_fingerprint=None, empty_only=False,
+            replace_orphan_rgb=False):
     database = database_path(database)
     destination = plan_folder(destination, database)
     if destination.exists():
@@ -266,7 +267,8 @@ def prepare(database, entries, destination, *, expected_fingerprint=None, empty_
                 validate_waveform(blob, kind, report["declared_frames"])
             target = rgb_path(database, uid, tid)
             old_rgb = target.read_bytes() if target.exists() else None
-            if empty_only and (perf["overviewWaveFormData"] or old_rgb is not None):
+            if empty_only and (perf["overviewWaveFormData"] or
+                               (old_rgb is not None and not replace_orphan_rgb)):
                 raise ValueError(f"Track {tid} acquired a waveform during generation; retry")
             items.append(
                 {

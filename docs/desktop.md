@@ -70,7 +70,9 @@ This does not create the scrolling high-resolution waveform.
 
 For an already converted drive, **Fill waveforms** adds missing overviews without
 rebuilding the library. Existing waveforms are preserved, including tracks with
-only one of the two overview formats. This operation requires Engine schema 3.0.2;
+only one of the two overview formats. An explicitly confirmed full reconversion
+regenerates RGB files left by the previous database and saves their old bytes in
+the waveform backup. This operation requires Engine schema 3.0.2;
 conversion with the option enabled creates that schema. Unsupported audio or a
 generation failure leaves the waveform batch unpublished; successfully processed
 files remain cached for retry. The base conversion remains saved if a later

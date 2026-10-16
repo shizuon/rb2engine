@@ -286,7 +286,7 @@ class DesktopService:
             from rb2engine.desktop.waveforms import describe, fill
 
             try:
-                waveforms = fill(database, self._progress, context=waveform_context)
+                waveforms = fill(database, self._progress, context=waveform_context, rebuilt=True)
                 with self._lock:
                     self._state["result"]["waveforms"] = waveforms
                     self._state["details"] += "\n\n" + describe(waveforms)
