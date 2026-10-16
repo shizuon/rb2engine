@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
-import shutil
 import sqlite3
 import sys
 
@@ -312,7 +311,12 @@ def test_runtime_assets_spectrogram_peaks_and_silence(monkeypatch, tmp_path):
 
 
 def test_actual_audio_model_repairs_authored_grid(tmp_path):
-    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+    from rb2engine.overviews.decoder import executable
+
+    try:
+        executable("ffmpeg")
+        executable("ffprobe")
+    except RuntimeError:
         pytest.skip("Native decoder unavailable; frozen desktop smoke covers this on both OSes")
     root = make_grid_drive(tmp_path / "Authored Grid 中文 %")
     library = read_library(root)

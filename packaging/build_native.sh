@@ -37,8 +37,8 @@ fi
   --enable-shared --disable-static --enable-ffmpeg --enable-ffprobe \
   --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-swresample \
   --disable-avdevice --disable-swscale \
-  --enable-protocol=file \
-  --enable-demuxer=wav,aiff,mp3,mov,flac,aac,ogg \
+  --enable-protocol=file,pipe \
+  --enable-demuxer=wav,aiff,mp3,mov,flac,aac,ogg,pcm_f32le \
   --enable-decoder=pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,mp3,mp3float,aac,flac,alac,vorbis,opus \
   --enable-parser=aac,mpegaudio,flac,opus,vorbis \
   --enable-encoder=pcm_f32le,pcm_s16le,aac,flac \

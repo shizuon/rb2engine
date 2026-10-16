@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           export RB2ENGINE_NATIVE_RUNTIME="$GITHUB_WORKSPACE/build/native-runtime"
-          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
+          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference tests/unit/test_grid_repair.py::test_actual_audio_model_repairs_authored_grid
       - name: Build standalone application
         run: uv run pyinstaller --noconfirm packaging/desktop.spec
       - name: Verify macOS bundle version
