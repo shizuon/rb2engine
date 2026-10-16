@@ -34,7 +34,7 @@ def cache_key(audio_sha, runtime, implementation):
 
 def verify_entry(folder, expected_key=None):
     folder = Path(folder)
-    report = json.loads((folder / "result.json").read_text())
+    report = json.loads((folder / "result.json").read_text(encoding="utf-8"))
     if (
         report.get("schema") != 2
         or report["declared_frames"] <= 0
@@ -214,7 +214,9 @@ def generate(audio, cache_root, library=None, *, context=None):
         }
         del decoded
         (staging / "decoded.f32").unlink()
-        (staging / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+        (staging / "result.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         verify_entry(staging, identity)
         try:
             staging.rename(target)

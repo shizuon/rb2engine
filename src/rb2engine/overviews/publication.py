@@ -381,7 +381,7 @@ def publication_lock(database):
 
 def load_plan(folder):
     folder = reject_symlinks(folder).resolve(strict=True)
-    plan = json.loads(reject_symlinks(folder / "plan.json").read_text())
+    plan = json.loads(reject_symlinks(folder / "plan.json").read_text(encoding="utf-8"))
     if plan.get("schema") != 1:
         raise ValueError("Unknown publication plan")
     db = database_path(plan["database"])
@@ -577,7 +577,7 @@ def quiescent_process_only():
 
 def verify(folder):
     folder, plan, db = load_plan(folder)
-    journal = json.loads(reject_symlinks(folder / "journal.json").read_text())
+    journal = json.loads(reject_symlinks(folder / "journal.json").read_text(encoding="utf-8"))
     if digest(folder / "plan.json") != journal["plan_sha256"]:
         raise ValueError("Publication plan changed after mutation")
     side = (
@@ -613,10 +613,10 @@ def verify(folder):
 def restore(folder):
     writable_platform()
     folder, plan, db = load_plan(folder)
-    journal = json.loads(reject_symlinks(folder / "journal.json").read_text())
+    journal = json.loads(reject_symlinks(folder / "journal.json").read_text(encoding="utf-8"))
     if digest(folder / "plan.json") != journal["plan_sha256"]:
         raise ValueError("Plan changed; cannot safely restore")
-    backup = json.loads(reject_symlinks(folder / "backup.json").read_text())
+    backup = json.loads(reject_symlinks(folder / "backup.json").read_text(encoding="utf-8"))
     backup_file = reject_symlinks(folder / "before.sqlite3")
     if digest(backup_file) != backup["sha256"]:
         raise ValueError("Backup damaged")

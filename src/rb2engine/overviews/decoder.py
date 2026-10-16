@@ -399,7 +399,7 @@ def decode(path, scratch, *, metadata=None, aac_reader=None, ffmpeg=None):
     if not size or size % frame_bytes:
         raise ValueError("Empty or incomplete decoded PCM")
     if plan["codec"] == "aac":
-        plan["aac_bootstrap"] = json.loads(bootstrap_report.read_text())
+        plan["aac_bootstrap"] = json.loads(bootstrap_report.read_text(encoding="utf-8"))
         bootstrap_report.unlink()
         frame_metadata = plan["aac_bootstrap"].pop("frames")
         start_offset = native_frames(

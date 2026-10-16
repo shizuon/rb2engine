@@ -116,7 +116,11 @@ class PublicationTests(unittest.TestCase):
         c.close()
         self.batch = self.folder / "Engine Library/publication"
         pub.prepare(self.db, [{"track_id": 1, "cache_path": self.entry["cache_path"]}], self.batch)
-        self.ps = patch.object(pub.subprocess, "check_output", return_value="/sbin/launchd\n")
+        self.process_output = (
+            '"system.exe","4","Services","0","100 K"\n'
+            if platform.system() == "Windows" else "/sbin/launchd\n"
+        )
+        self.ps = patch.object(pub.subprocess, "check_output", return_value=self.process_output)
         self.ps.start()
         self.addCleanup(self.ps.stop)
 
@@ -143,7 +147,9 @@ class PublicationTests(unittest.TestCase):
             patch.object(
                 pub.subprocess,
                 "check_output",
-                return_value="/Applications/Engine DJ.app/Contents/MacOS/Engine DJ\n",
+                return_value=('"Engine DJ.exe","123","Console","1","100 K"\n'
+                              if platform.system() == "Windows"
+                              else "/Applications/Engine DJ.app/Contents/MacOS/Engine DJ\n"),
             ),
             self.assertRaisesRegex(ValueError, "Quit Engine"),
         ):
@@ -346,7 +352,7 @@ class PublicationTests(unittest.TestCase):
             patch.object(
                 pub.subprocess,
                 "check_output",
-                side_effect=["/sbin/launchd\n", OSError("ps failed")],
+                side_effect=[self.process_output, OSError("ps failed")],
             ),
             self.assertRaisesRegex(RuntimeError, "process visibility"),
         ):

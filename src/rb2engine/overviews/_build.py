@@ -112,7 +112,7 @@ def cached_build(
     manifest = destination / "build.json"
     if destination.exists():
         try:
-            recorded = json.loads(manifest.read_text())
+            recorded = json.loads(manifest.read_text(encoding="utf-8"))
             if recorded["identity"] != identity or sha(artifact) != recorded["binary_sha256"]:
                 raise ValueError("native artifact identity mismatch")
         except (OSError, ValueError, KeyError) as exc:
@@ -133,14 +133,14 @@ def cached_build(
         if result.returncode:
             raise RuntimeError("Overview native compilation failed: " + result.stderr[-4000:])
         recorded = {"identity": identity, "binary_sha256": sha(binary)}
-        (stage / "build.json").write_text(json.dumps(recorded, indent=2))
+        (stage / "build.json").write_text(json.dumps(recorded, indent=2), encoding="utf-8")
         try:
             stage.rename(destination)
         except OSError:
             if not destination.is_dir():
                 raise
             # Another builder won. Validate its result rather than overwriting it.
-            other = json.loads(manifest.read_text())
+            other = json.loads(manifest.read_text(encoding="utf-8"))
             if other["identity"] != identity or sha(artifact) != other["binary_sha256"]:
                 raise RuntimeError(
                     "Concurrent overview build produced an invalid artifact"
