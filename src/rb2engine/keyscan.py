@@ -146,6 +146,7 @@ def _spawn(command: Sequence[str], stderr: Any) -> subprocess.Popen[str]:
     env = os.environ.copy()
     # A frozen app must not lend its Python/DLL paths to another frozen app.
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     for name in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         if f"{name}_ORIG" in env:
             env[name] = env[f"{name}_ORIG"]
