@@ -518,7 +518,7 @@ def test_render_text_with_many_discrepancies(
 def test_verify_catches_beatgrid_offset_shift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Shifting a beat marker sample_offset must report beatgrid.sample_offsets.
+    """Shifting a beat marker sample_offset must report beatgrid.default_markers.
 
     WHY: A grid shifted by even a few hundred samples makes every downbeat
     land off the kick — the set feels 'wrong' with no Engine error dialog.
@@ -550,11 +550,13 @@ def test_verify_catches_beatgrid_offset_shift(
     result = verify_library(drive, with_artwork=False)
 
     assert result.ok is False
-    d = _disc(result, "beatgrid.sample_offsets")
+    d = _disc(result, "beatgrid.default_markers")
     assert d.track_id == 10
     assert d.expected != d.actual
-    # The actual offsets must include the shifted first marker.
-    assert int(shifted.sample_offset) in [int(x) for x in d.actual]
+    # One discrepancy covers the offset and beat numbering together.
+    assert len([item for item in result.discrepancies
+                if item.field.startswith("beatgrid.")]) == 1
+    assert int(shifted.sample_offset) in [int(marker[0]) for marker in d.actual]
 
 
 def test_verify_catches_beatgrid_marker_count_change(
@@ -585,7 +587,7 @@ def test_verify_catches_beatgrid_marker_count_change(
 
     result = verify_library(drive, with_artwork=False)
 
-    d = _disc(result, "beatgrid.sample_offsets")
+    d = _disc(result, "beatgrid.default_markers")
     assert d.track_id == 20
     assert len(d.expected) == len(markers)
     assert len(d.actual) == len(markers) - 1

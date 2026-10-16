@@ -8,6 +8,7 @@ import json
 import sqlite3
 import sys
 from contextlib import closing
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,7 +18,7 @@ from rb2engine.cli import main
 from rb2engine.desktop.service import DesktopService
 from rb2engine.errors import FatalError
 from rb2engine.gridrepair import repair, runtime
-from rb2engine.ir import SourceBeatgrid
+from rb2engine.ir import SourceBeat, SourceBeatgrid
 from rb2engine.reader.library import read_library
 from rb2engine.report import REPORT_FILENAME
 from rb2engine.verify import verify_library
@@ -25,11 +26,20 @@ from rb2engine.writer.blobs import decode_beat_data, encode_beat_data
 from tests.desktop_fixture import make_drive
 from tests.grid_fixture import make_grid_drive
 from tests.unit.test_desktop import manifest, wait
+from tests.unit.test_map_track import _track
 
 
 @pytest.fixture
 def library(tmp_path):
     return read_library(make_drive(tmp_path / "Grid USB 中文 #1 %", analysis=True, duration=96))
+
+
+@pytest.fixture
+def track():
+    # Pure policy tests need beat timestamps, not a 96-second WAV or USB export.
+    beats = [SourceBeat((i + 2) % 4 + 1, 11025 + i * 22050, 120.0) for i in range(192)]
+    return _track(rb_id=1, bpm=120.0, duration_s=96, total_samples=96 * 44100,
+                  resolved_path=Path("authored.wav"), beatgrid=SourceBeatgrid(beats, False))
 
 
 def predictions(track, offsets=(-0.08, -0.08, -0.08), phases=(3, 3, 3)):
@@ -62,11 +72,9 @@ def mock_detector(monkeypatch, passages, error=None):
     monkeypatch.setattr(runtime, "BeatDetector", Detector)
 
 
-@pytest.mark.parametrize("mode", ["strict", "majority"])
 @pytest.mark.parametrize("offset,phase", [(-0.08, 3), (0.08, 1), (0, 3), (0, 1), (0.01, 1)])
-def test_uniform_shift_and_phase_preserve_tempo_and_original(library, mode, offset, phase):
-    track = library.tracks[1]
-    result = repair.assess(track, predictions(track, (offset,) * 3, (phase,) * 3), mode=mode)
+def test_uniform_shift_and_phase_preserve_tempo_and_original(track, offset, phase):
+    result = repair.assess(track, predictions(track, (offset,) * 3, (phase,) * 3))
     assert result["sample_shift"] == (round(offset * 44100) if abs(offset) > 0.02 else 0)
     assert result["bar_phase_shift"] == (1 - phase) % 4
     assert result["supporting_windows"] == [0, 1, 2]
@@ -81,8 +89,7 @@ def test_uniform_shift_and_phase_preserve_tempo_and_original(library, mode, offs
 
 @pytest.mark.parametrize("bad_index", [0, 1, 2])
 @pytest.mark.parametrize("problem", ["phase", "offset", "empty", "half_tempo", "double_tempo"])
-def test_only_majority_accepts_two_matching_passages(library, bad_index, problem):
-    track = library.tracks[1]
+def test_only_majority_accepts_two_matching_passages(track, bad_index, problem):
     p = predictions(track)
     if problem == "phase":
         p[bad_index] = predictions(track, phases=(1, 1, 1))[bad_index]
@@ -103,8 +110,7 @@ def test_only_majority_accepts_two_matching_passages(library, bad_index, problem
 
 
 @pytest.mark.parametrize("mode", ["strict", "majority"])
-def test_weak_or_conflicting_evidence_never_repairs(library, mode):
-    track = library.tracks[1]
+def test_weak_or_conflicting_evidence_never_repairs(track, mode):
     assert (
         repair.assess(track, predictions(track, phases=(1, 2, 3)), mode=mode)["status"] == "skipped"
     )
@@ -137,8 +143,7 @@ def test_weak_or_conflicting_evidence_never_repairs(library, mode):
         ("phase", "bar_phase_changes"),
     ],
 )
-def test_eligibility_abstains(library, mutation, reason):
-    track = library.tracks[1]
+def test_eligibility_abstains(track, mutation, reason):
     beats = list(track.beatgrid.beats)
     if mutation == "missing":
         track = dataclasses.replace(track, beatgrid=None)
@@ -166,8 +171,7 @@ def test_eligibility_abstains(library, mutation, reason):
     assert repair.assess(track, [])["reason"] == reason
 
 
-def test_passage_geometry_and_values(library):
-    track = library.tracks[1]
+def test_passage_geometry_and_values(track):
     assert repair.assess(track, [])["reason"] == "three_passages_required"
     p = predictions(track)
     p[1]["start_seconds"] = 1

@@ -1,0 +1,54 @@
+name: Optional source compatibility
+
+# Desktop releases embed Python 3.12. Run this explicitly when changing the
+# Python support range or the externally installed waveform toolchain.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Source / Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --all-extras --dev
+      - run: uv run pytest -q -m "not real_stick"
+
+  waveforms-native:
+    name: Apple Silicon waveform integration
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install external audio tools
+        run: brew install ffmpeg pkgconf
+      - run: uv sync --all-extras --dev
+      - name: Configure native build cache
+        run: echo "RB2ENGINE_OVERVIEWS_BUILD_CACHE=$RUNNER_TEMP/rb2engine-build" >> "$GITHUB_ENV"
+      - name: Check native and AAC dependencies
+        run: uv run rb2engine waveforms doctor
+      - name: Native reference and publication recovery
+        run: uv run pytest -q tests/unit/test_overview_backend.py tests/unit/test_overview_publication.py tests/unit/test_overview_multistream.py
+      - name: Exercise AAC generation and cache readback
+        shell: bash
+        run: |
+          ffmpeg -v error -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 -ac 2 -c:a aac "$RUNNER_TEMP/overview-smoke.m4a"
+          uv run rb2engine waveforms generate "$RUNNER_TEMP/overview-smoke.m4a" --cache "$RUNNER_TEMP/overview-cache" > "$RUNNER_TEMP/overview-result.json"
+          uv run python - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'overview-result.json').read_text())
+          subprocess.run([sys.executable, '-m', 'rb2engine', 'waveforms', 'verify-cache', result['cache_path']], check=True)
+          PY

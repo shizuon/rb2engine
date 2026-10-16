@@ -678,22 +678,6 @@ def _compare_beatgrid(
         )
         return
 
-    exp_markers = expected.beat_grid.default_markers
-    act_markers = bd.default_beat_grid.markers
-
-    # Exact integer equality on sample offsets (no float tolerance).
-    exp_offsets = [int(m.sample_offset) for m in exp_markers]
-    act_offsets = [int(m.sample_offset) for m in act_markers]
-    if exp_offsets != act_offsets:
-        discrepancies.append(
-            Discrepancy(
-                track_id=rb_id,
-                field="beatgrid.sample_offsets",
-                expected=exp_offsets,
-                actual=act_offsets,
-            )
-        )
-
     # Verify both numbered grids, including the intentionally adjusted one.
     for name, expected_grid, actual_grid in (
         ("default", expected.beat_grid.default_markers, bd.default_beat_grid.markers),

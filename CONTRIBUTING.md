@@ -155,10 +155,17 @@ triple from `Information` if you can read it from a **copy** of `m.db`.
 ## Optional waveforms and release checks
 
 Keep base imports and `--help` independent of NumPy, compilers and FFmpeg.
-Mocked backend tests run on all three CI systems. Native tests skip only when
-their declared platform/tool prerequisites are absent; a dedicated Apple Silicon
-job installs FFmpeg and pkg-config and exercises native reference, publication,
-recovery and AAC generation. The coverage floor remains 85%.
+Regular PR checks and releases use the bundled Python 3.12: one Linux full
+suite with Ruff, mypy and the 85% coverage floor, plus Windows/macOS desktop
+jobs. The desktop jobs exercise platform file locks, Unicode paths, recovery,
+native waveform references and the actual frozen UI, model and audio tools.
+The frozen model check replaces the duplicate pre-freeze audio-model check.
+
+Python 3.11/3.13 source suites and the external Apple Silicon FFmpeg/compiler
+integration remain available in **Optional source compatibility**, started
+manually when those support boundaries change. They are not desktop release
+gates. PRs run checks once; merging does not repeat them. Tags rerun the core
+suite and both desktop builds against the exact published source.
 
 Use an isolated native cache for local testing when needed:
 

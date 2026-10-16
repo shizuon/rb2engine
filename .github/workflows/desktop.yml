@@ -2,13 +2,15 @@ name: Desktop builds
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
 
 permissions:
   contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   desktop:
@@ -54,12 +56,12 @@ jobs:
         if: runner.os == 'macOS' && steps.native-cache.outputs.cache-hit != 'true'
         run: bash packaging/build_native.sh
       - name: Test conversion and path handling on this platform
-        run: uv run pytest -q tests/unit/test_desktop.py tests/unit/test_keyscan.py tests/unit/test_paths_unicode.py tests/unit/test_library_lock.py
+        run: uv run pytest -q tests/unit/test_desktop.py tests/unit/test_keyscan.py tests/unit/test_paths_unicode.py tests/unit/test_library_lock.py tests/unit/test_overview_publication.py tests/unit/test_grid_repair.py::test_conversion_verify_mutation_and_restoration
       - name: Test bundled audio and native waveform reference
         shell: bash
         run: |
           export RB2ENGINE_NATIVE_RUNTIME="$GITHUB_WORKSPACE/build/native-runtime"
-          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference tests/unit/test_grid_repair.py::test_actual_audio_model_repairs_authored_grid
+          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
       - name: Build standalone application
         run: uv run pyinstaller --noconfirm packaging/desktop.spec
       - name: Verify macOS bundle version
