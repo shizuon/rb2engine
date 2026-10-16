@@ -1,0 +1,11 @@
+{
+  "source": "https://github.com/CPJKU/beat_this",
+  "source_version": "1.1.0",
+  "checkpoint_url": "https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp/small0.ckpt",
+  "checkpoint_sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b",
+  "export_opset": 17,
+  "files": {
+    "small0.onnx": "f129d533ad02f3e48a890ff0b752e80c0a57540e1b5e8fb85aa2a59f1e86568d",
+    "frontend.npz": "167e4dcf1bd7083097ef365c7236bf5c6e6f95d0ab92b586487951f0f3bdd6d1"
+  }
+}

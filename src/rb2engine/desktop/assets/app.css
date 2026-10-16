@@ -3,3 +3,7 @@
 .keyscan-option{margin:0 0 18px}#keyscan-help{font-size:11px;color:#8b9189;margin:7px 0 0 23px}#keyscan-help button{font-size:11px;margin-right:10px}
 
 .waveform-option{margin:0 0 18px}.actions>.artwork{margin-right:auto}
+
+.grid-option{margin:0 0 18px}#grid-help{margin:6px 0 0 23px;font-size:11px;color:#717c68;max-width:500px}
+
+#grid-options{margin:9px 0 0 23px}#grid-options p{margin-left:0}.grid-mode-label{font-size:11px;color:#717c68;margin-right:9px}#grid-mode{font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:white;color:var(--ink)}

@@ -136,11 +136,19 @@ def _map_beatgrid(src: SourceTrack, *, samples: int) -> EngineBeatGrid:
             is_beatgrid_set=False,
         )
     total = samples if samples > 0 else None
-    return compress_beatgrid(
+    original = compress_beatgrid(
         src.beatgrid,
         sample_rate=int(src.sample_rate) if src.sample_rate else 0,
         total_samples=total,
     )
+    if src.adjusted_beatgrid is None:
+        return original
+    adjusted = compress_beatgrid(
+        src.adjusted_beatgrid, sample_rate=src.sample_rate, total_samples=total,
+    )
+    return EngineBeatGrid(default_markers=original.default_markers,
+                          adjusted_markers=adjusted.adjusted_markers,
+                          is_beatgrid_set=original.is_beatgrid_set)
 
 
 def _map_cues(cues: list[SourceCue]) -> tuple[list[QuickCueSlot], list[LoopSlot]]:

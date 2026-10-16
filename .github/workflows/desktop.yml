@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           export RB2ENGINE_NATIVE_RUNTIME="$GITHUB_WORKSPACE/build/native-runtime"
-          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
+          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference tests/unit/test_grid_repair.py::test_actual_audio_model_repairs_authored_grid
       - name: Build standalone application
         run: uv run pyinstaller --noconfirm packaging/desktop.spec
       - name: Verify macOS bundle version
@@ -156,6 +156,37 @@ jobs:
           print(json.dumps(result))
           (Path(os.environ['RUNNER_TEMP']) / 'analysis-smoke.json').write_text(json.dumps(result))
           PY
+      - name: Create authored grid repair input
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+          from tests.grid_fixture import make_grid_drive
+          make_grid_drive(Path(os.environ['RUNNER_TEMP']) / 'Grid 修复 #2 %')
+          PY
+      - name: Windows packaged grid repair in both modes
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($mode in @('strict', 'majority')) {
+            $out = "$env:RUNNER_TEMP/grid-$mode-smoke.json"
+            $drive = "$env:RUNNER_TEMP/Grid 修复 #2 %"
+            $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"", '--smoke-grid', $mode) -PassThru
+            if (-not $process.WaitForExit(390000)) { $process.Kill(); throw 'Packaged grid repair timed out' }
+            if (!(Test-Path $out)) { throw 'Grid repair smoke evidence missing' }
+            Get-Content $out
+            $result = Get-Content $out -Raw | ConvertFrom-Json
+            if (!$result.ok -or $process.ExitCode -ne 0) { throw 'Packaged grid repair failed' }
+          }
+      - name: macOS packaged grid repair in both modes
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for mode in strict majority; do
+            dist/rb2engine.app/Contents/MacOS/rb2engine --smoke-test "$RUNNER_TEMP/grid-$mode-smoke.json" --smoke-drive "$RUNNER_TEMP/Grid 修复 #2 %" --smoke-grid "$mode"
+            cat "$RUNNER_TEMP/grid-$mode-smoke.json"
+          done
       - name: Collect licenses and archive
         shell: bash
         run: |
@@ -173,4 +204,5 @@ jobs:
             ${{ runner.temp }}/desktop-smoke.json
             ${{ runner.temp }}/keyscan-smoke.json
             ${{ runner.temp }}/analysis-smoke.json
+            ${{ runner.temp }}/grid-*-smoke.json
             build/desktop/warn-desktop.txt

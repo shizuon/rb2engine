@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0] - 2026-10-17
+
+### Added
+
+- Default-off experimental grid repair using the bundled offline BeatThis small0
+  model through ONNX Runtime. Strict mode requires three agreeing passages;
+  Relaxed mode accepts any two, with the same per-passage quality checks.
+- Preserve source BPM, beat spacing, Cue/loop positions, audio and the default
+  grid. Store only an accepted time/bar-phase shift in the adjusted grid.
+  Reconvert with repair disabled to restore the source grid.
+- Record model hashes, mode, individual passage evidence and per-track outcomes.
+  Verify both numbered grids and reject altered repair/source/audio records.
+- CLI `--repair-grid --grid-mode strict|majority`, model provenance and MIT notice.
+- Test both modes through the actual frozen Windows/macOS UI using authored
+  audio with deliberate timing and bar-phase errors.
+
 ## [0.7.2] - 2026-10-17
 
 ### Fixed

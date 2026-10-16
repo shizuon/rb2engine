@@ -444,6 +444,9 @@ def _build_library_locked(
                 key_analysis_sha256=(
                     digest_record(report.key_analysis) if report.key_analysis is not None else None
                 ),
+                grid_repair_sha256=(
+                    digest_record(report.grid_repair) if report.grid_repair is not None else None
+                ),
             )
 
         # journal_mode=DELETE removes m.db.tmp-journal on clean close; assert.

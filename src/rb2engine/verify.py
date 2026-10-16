@@ -277,6 +277,22 @@ def verify_library(
         except (OSError, ValueError) as exc:
             raise FatalError(f"Cannot read OpenKeyScan verification record: {exc}") from exc
 
+    if (recorded and recorded.get("grid_repair_sha256")
+            and source.fingerprint is not None
+            and source.fingerprint.sha256 == recorded.get("pdb_sha256")):
+        from rb2engine.gridrepair.repair import replay_repairs
+        from rb2engine.keyscan import digest_record
+
+        try:
+            payload = json.loads((engine_lib / REPORT_FILENAME).read_text(encoding="utf-8"))
+            repair = payload.get("grid_repair") if isinstance(payload, dict) else None
+            if (not isinstance(repair, dict)
+                    or digest_record(repair) != recorded["grid_repair_sha256"]):
+                raise FatalError("Grid repair record is missing or changed; cannot verify")
+            source = replay_repairs(source, repair)
+        except (OSError, ValueError) as exc:
+            raise FatalError(f"Cannot read grid repair verification record: {exc}") from exc
+
     # Hash the m.db BEFORE decoding it: this is the "which oracle moved"
     # question, and it must be answered against the same bytes we then verify.
     with m_db_path.open("rb") as fh:
@@ -677,6 +693,17 @@ def _compare_beatgrid(
                 actual=act_offsets,
             )
         )
+
+    # Verify both numbered grids, including the intentionally adjusted one.
+    for name, expected_grid, actual_grid in (
+        ("default", expected.beat_grid.default_markers, bd.default_beat_grid.markers),
+        ("adjusted", expected.beat_grid.adjusted_markers, bd.adjusted_beat_grid.markers),
+    ):
+        intended = [(int(m.sample_offset), m.beat_number, m.number_of_beats) for m in expected_grid]
+        actual = [(int(m.sample_offset), m.beat_number, m.number_of_beats) for m in actual_grid]
+        if intended != actual:
+            discrepancies.append(Discrepancy(track_id=rb_id, field=f"beatgrid.{name}_markers",
+                                             expected=intended, actual=actual))
 
 
 def _compare_quick_cues(

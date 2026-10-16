@@ -4,7 +4,7 @@ Copyright (c) 2026 J.R. Gutierrez
 Licensed under the MIT License. See LICENSE.
 
 This fork preserves the upstream copyright and MIT license. Its additions
-are maintained at https://github.com/Last-Xuan-ai/rb2engine.
+are maintained at https://github.com/shizuon/rb2engine.
 
 Source/wheel installs resolve Python dependencies separately. Desktop packages
 bundle them and include their installed license texts under licenses/:
@@ -15,12 +15,24 @@ bundle them and include their installed license texts under licenses/:
   rich          MIT           human-readable output
   numpy         BSD-3-Clause  waveform processing
   pywebview     BSD-3-Clause  optional desktop UI
+  onnxruntime   MIT           optional offline grid repair inference
+  BeatThis      MIT           small0 weights and adapted pre/postprocessing
 
 mutagen (GPL-2.0-or-later) is a DEVELOPMENT dependency only. It is used
 exclusively in the test suite as an independent oracle confirming that
 `src/rb2engine/reader/tags.py` extracts byte-identical cover art. It is not
 imported by any module under `src/`, is not required at runtime, and is not
 included in release artifacts.
+
+BeatThis model and inference
+---------------------------
+The optional grid repair component redistributes the MIT-licensed small0 model
+from CPJKU/beat_this 1.1.0, exported to ONNX. Its NumPy pre/postprocessing adapts
+the upstream implementation. The upstream license is included in
+src/rb2engine/gridrepair/assets/LICENSE and desktop licenses/BeatThis/LICENSE.
+The model source URL, checkpoint hash and exported file hashes are recorded in
+assets/manifest.json. Model inference is offline; PyTorch is not bundled.
+  https://github.com/CPJKU/beat_this
 
 FFmpeg runtime
 --------------
