@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.7.1] - 2026-10-17
+
+### Fixed
+
+- Preserve the source beat's position within its bar when a grid starts on
+  beat 2, 3 or 4. Downbeat numbering no longer treats every first stored beat
+  as a downbeat; beat times, cue times and source BPM are retained.
+- Keep valid PQTZ grids and later cues when an optional PQT2 body uses an
+  unsupported variant or is malformed. Unsafe tag-envelope failures remain
+  errors. No PQT2 fractional timing or new variable-tempo analysis is enabled.
+- Prefer recognizable embedded pictures when a malformed front-cover frame
+  would otherwise hide a usable image. Retain existing ID3 frame decoding,
+  normal front-cover priority and corruption warnings.
+
+### Validation
+
+- Regressions cover all four source bar phases at 44.1/48 kHz, optional-tag
+  failures, ID3v2.2/v2.3/v2.4 fallback and source-byte preservation.
+- Packaged Windows/macOS conversion now verifies an authored 1.25-second
+  downbeat and Cue through the actual written Engine database.
+- Document the distinction between beat timing, bar phase and audio-based
+  downbeat estimation in `docs/grid-alignment.md`.
+
+The optional-tag and artwork fallbacks were informed by kjekac's upstream
+PRs [#13](https://github.com/jrgutier/rb2engine/pull/13) and
+[#12](https://github.com/jrgutier/rb2engine/pull/12), respectively; the draft
+variable-tempo/PQT2 precision implementation is not imported.
+
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

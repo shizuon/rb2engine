@@ -16,6 +16,7 @@ from pathlib import Path
 from rb2engine.ir import SourceArtwork
 from rb2engine.ir_engine import artwork_content_hash
 from rb2engine.reader.tags import embedded_cover_bytes
+from rb2engine.reader.tags import looks_like_image as _looks_like_image
 
 SOURCE_EMBEDDED = "embedded"
 SOURCE_PDB = "pdb"
@@ -23,21 +24,6 @@ SOURCE_PDB = "pdb"
 
 def _warn(message: str) -> None:
     warnings.warn(message, UserWarning, stacklevel=3)
-
-
-def _looks_like_image(data: bytes) -> bool:
-    """Reject garbage that would land as a useless AlbumArt BLOB."""
-    if len(data) < 8:
-        return False
-    if data.startswith(b"\xff\xd8\xff"):  # JPEG
-        return True
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
-        return True
-    if data.startswith((b"GIF87a", b"GIF89a")):
-        return True
-    if data.startswith(b"BM"):  # BMP
-        return True
-    return bool(data.startswith(b"RIFF") and data[8:12] == b"WEBP")
 
 
 def _read_embedded_image_bytes(track_path: Path) -> bytes | None:

@@ -107,8 +107,9 @@ def read_anlz(
     Returns
     -------
     (grid, cues, warnings)
-        Positions are integer samples. Malformed *consumed* tags raise
-        ``TrackSkipped`` with a machine-stable ``reason_code``.
+        Positions are integer samples. Malformed required tags or tag envelopes
+        raise ``TrackSkipped`` with a machine-stable ``reason_code``. An
+        unsupported optional PQT2 body warns without discarding PQTZ or cues.
     """
     if sample_rate <= 0:
         _raise_skipped("anlz_invalid_sample_rate", str(sample_rate))
@@ -153,6 +154,18 @@ def read_anlz(
                 warnings.append(f"unknown_tag:{fourcc}")
                 continue
 
+            if fourcc == "PQT2":
+                # The envelope walk already proved where this tag ends. PQT2
+                # is optional, so a parser's strict variant/layout assumptions
+                # must not erase the PQTZ grid or prevent later cues being read.
+                # No fractional timing or variable-tempo inference is applied.
+                try:
+                    _parse_pqt2(blob)
+                    has_pqt2 = True
+                except TrackSkipped as exc:
+                    warnings.append(f"pqt2_ignored:{path.name}:{exc}")
+                continue
+
             try:
                 if fourcc == "PQTZ":
                     parsed = _parse_pqtz(blob, sample_rate)
@@ -162,9 +175,6 @@ def read_anlz(
                     # somehow carry one (DAT is the normal source).
                     if kind == "dat" or pqtz_beats is None:
                         pqtz_beats = parsed
-                elif fourcc == "PQT2":
-                    _parse_pqt2(blob)  # validate layout
-                    has_pqt2 = True
                 elif fourcc == "PCOB":
                     # Only collect PCOB when we do not yet have PCO2 cues from EXT.
                     # Always parse DAT PCOB as fallback material.

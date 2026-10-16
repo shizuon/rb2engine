@@ -399,10 +399,28 @@ def _find_desc_end(body: bytes, start: int, encoding: int) -> int | None:
 def _pick_cover(apics: list[tuple[int, bytes]]) -> bytes | None:
     if not apics:
         return None
-    for ptype, data in apics:
+    # A malformed type-3 APIC must not hide another frame's usable image.
+    # If every candidate is unrecognizable, preserve the raw result so the
+    # artwork layer can report corruption rather than silently claiming absence.
+    usable = [(ptype, data) for ptype, data in apics if looks_like_image(data)]
+    candidates = usable or apics
+    for ptype, data in candidates:
         if ptype == _FRONT_COVER:
             return data
-    return apics[0][1]
+    return candidates[0][1]
+
+
+def looks_like_image(data: bytes) -> bool:
+    """Recognize supported image headers, without claiming full image validity."""
+    if len(data) < 8:
+        return False
+    if data.startswith(b"\xff\xd8\xff"):
+        return True
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if data.startswith((b"GIF87a", b"GIF89a", b"BM")):
+        return True
+    return bool(data.startswith(b"RIFF") and data[8:12] == b"WEBP")
 
 
 def _is_frame_id(frame_id: bytes) -> bool:

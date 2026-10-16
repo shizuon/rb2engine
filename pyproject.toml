@@ -1,6 +1,6 @@
 [project]
 name = "rb2engine"
-version = "0.7.0"
+version = "0.7.1"
 description = "Convert a rekordbox USB export into an Engine DJ library, in place, without duplicating your music"
 readme = "README.md"
 license = "MIT"
@@ -74,7 +74,7 @@ packages = ["src/rb2engine"]
 # Keep the sdist lean: ship the package and its captured DDL, not the
 # multi-hundred-MB test corpus or local planning artifacts.
 include = ["src/rb2engine", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md",
-           "docs/desktop.md", "docs/waveforms.md", "docs/waveform-validation.md",
+           "docs/desktop.md", "docs/grid-alignment.md", "docs/waveforms.md", "docs/waveform-validation.md",
            "docs/waveform-validation.json", "docs/integrated-waveform-validation.json"]
 
 [tool.pytest.ini_options]

@@ -9,8 +9,8 @@ Algorithm (aligned with libdjinterop normalize_beatgrid + convert write path):
 3. Extrapolate the last marker to the first beat past total_samples.
 4. number_of_beats on each non-final marker = next.beat_number - this.beat_number.
 
-Downbeat: when the dense list starts on beat_in_bar==1, indices after -4
-normalization keep downbeats on beat_number ≡ 0 (mod 4).
+Downbeat: preserve the first source beat's position within its bar so
+beat_in_bar==1 stays on beat_number ≡ 0 (mod 4), including pickup beats.
 """
 
 from __future__ import annotations
@@ -85,12 +85,16 @@ def _compress_dense(
     rescanning. BPM changes remain mandatory anchors as before.
     """
     n = len(beats)
+    # PQTZ may start on beat 2, 3 or 4. Dense list index zero is not necessarily
+    # a musical downbeat; preserve the source bar phase without moving audio
+    # timestamps. Normalization extrapolates from these absolute beat numbers.
+    first_beat_number = beats[0].beat_in_bar - 1
     if n == 1:
         b = beats[0]
         return [
             EngineBeatMarker(
                 sample_offset=float(b.sample_offset),
-                beat_number=0,
+                beat_number=first_beat_number,
                 number_of_beats=0,
                 unknown=0,
             )
@@ -121,7 +125,7 @@ def _compress_dense(
     return [
         EngineBeatMarker(
             sample_offset=float(beats[i].sample_offset),
-            beat_number=i,  # dense index — absolute beat count from start
+            beat_number=first_beat_number + i,
             number_of_beats=0,
             unknown=0,
         )
