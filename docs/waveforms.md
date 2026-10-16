@@ -39,6 +39,19 @@ Apple Silicon macOS; Linux is not covered by that native validation. Windows
 waveform generation is explicitly unsupported, while base conversion remains
 available there. Other FFmpeg/compiler builds can change decoder rounding.
 
+An MP3 without a Xing/VBRI duration index can have a severely wrong bitrate-based
+duration estimate. When FFmpeg reports this estimate and it differs from decoded
+audio by more than one second or one percent (whichever is larger), generation
+can recover the clock by scanning every MPEG frame and requiring its sample count
+to equal the decoded PCM count. Recovery requires variable bitrate, constant
+rate/channels, zero start offset and no other decoder warnings. Only leading
+ID3v2 and trailing ID3v1 tags are supported in this fallback; unknown bytes or
+partial frames fail. The cache records both the original estimate and the verified
+frame count. Source audio is not rewritten. This proves consistency of the audio
+present in the file; missing whole frames cannot be detected without an external
+reference. The recovered clock has not been compared with Engine's native reader
+for these unindexed long-set files.
+
 ## Existing-library workflow
 
 Waveform publication requires schema **3.0.2** and recognizable existing

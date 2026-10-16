@@ -195,13 +195,13 @@ def test_probe_uses_selected_tool_and_one_audio_packet(monkeypatch):
     assert command[-1] == "source.wav" and run.call_args.kwargs["timeout"] == 45
 
 
-def fake_decode(monkeypatch, pcm, *, code=0, report=None):
+def fake_decode(monkeypatch, pcm, *, code=0, report=None, stderr="mock warning\n"):
     def run(command, **kwargs):
         output = Path(command[-2] if report else command[-1])
         output.write_bytes(pcm)
         if report:
             Path(command[-1]).write_text(json.dumps(report))
-        return subprocess.CompletedProcess(command, code, "", "mock warning\n")
+        return subprocess.CompletedProcess(command, code, "", stderr)
 
     monkeypatch.setattr(decoder.subprocess, "run", run)
 
@@ -248,6 +248,114 @@ def test_implausible_declared_shortage_rejected(monkeypatch, tmp_path):
         decoder.decode(
             tmp_path / "source", tmp_path, metadata=metadata(duration="2"), ffmpeg="fake"
         )
+
+
+ESTIMATED_MP3_WARNING = "[mp3 @ fixture] Estimating duration from bitrate, this may be inaccurate\n"
+
+
+def unindexed_vbr_bytes(count=64):
+    """64 MPEG1 mono frames = 73,728 samples, alternating 128/192 kbps.
+
+    Frame sizes are floor(144000 * bitrate / 44100): 417 and 626 bytes.
+    Payload contents need no codec in these structural/fake-PCM tests.
+    """
+    return b"".join(
+        struct.pack(">I", word) + bytes(size - 4)
+        for word, size in [(0xFFFB90C0, 417), (0xFFFBB0C0, 626)] * (count // 2)
+    )
+
+
+@pytest.mark.parametrize("estimate", [147456, 1])
+def test_unindexed_vbr_duration_recovers_both_overestimate_and_underestimate(
+    monkeypatch, tmp_path, estimate
+):
+    """A bitrate estimate must neither reject a long set nor cut its audio tail."""
+    audio = tmp_path / "vbr.mp3"
+    audio.write_bytes(unindexed_vbr_bytes())
+    original = audio.read_bytes()
+    value = metadata("mp3", time_base="1/44100", duration_ts=estimate)
+    value["packets"] = [{"pos": 0}]
+    fake_decode(monkeypatch, bytes(73728 * 4), stderr=ESTIMATED_MP3_WARNING)
+    result = decoder.decode(audio, tmp_path, metadata=value, ffmpeg="fake")
+    assert result.frames == result.decoded_frames == result.processed_frames == 73728
+    assert result.plan["clock_policy"] == "mpeg_unindexed_vbr_verified_frame_count"
+    assert result.plan["estimated_frames_before_recovery"] == estimate
+    assert result.plan["mpeg_frame_scan"]["mpeg_frames"] == 64
+    assert audio.read_bytes() == original
+    result.pcm._mmap.close()
+
+
+def test_unindexed_vbr_scan_excludes_only_recognized_id3_tags(tmp_path):
+    audio = tmp_path / "tags.mp3"
+    # ID3v2.3 has a synchsafe three-byte body; ID3v1 is exactly 128 bytes.
+    prefix = b"ID3\x03\0\0\0\0\0\x03abc"
+    audio.write_bytes(prefix + unindexed_vbr_bytes() + b"TAG" + bytes(125))
+    assert decoder.unindexed_mp3_frames(audio, {"pos": 13}, 44100, 1) == {
+        "mpeg_frames": 64,
+        "samples_per_frame": 1152,
+        "sample_frames": 73728,
+    }
+
+
+@pytest.mark.parametrize(
+    "data,pos,match",
+    [
+        (unindexed_vbr_bytes()[:-1], 0, "incomplete MP3 frame"),
+        (unindexed_vbr_bytes() + b"junk", 0, "incomplete MP3 frame"),
+        (b"junk" + unindexed_vbr_bytes(), 4, "Unrecognized bytes before"),
+        (b"ID3\x03\0\0\0\0\0\x01" + unindexed_vbr_bytes(), 10, "ID3 length"),
+        (bytes(417) + unindexed_vbr_bytes(), 0, "incomplete MP3 frame"),
+        (struct.pack(">I", 0xFFFB94C0) + bytes(380), 0, "rate/channel changes"),
+        ((struct.pack(">I", 0xFFFB90C0) + bytes(413)) * 64, 0, "variable-bitrate"),
+    ],
+)
+def test_unindexed_vbr_recovery_never_resyncs_or_accepts_partial_frames(tmp_path, data, pos, match):
+    audio = tmp_path / "bad.mp3"
+    audio.write_bytes(data)
+    with pytest.raises(decoder.UnsupportedAudio, match=match):
+        decoder.unindexed_mp3_frames(audio, {"pos": pos}, 44100, 1)
+
+
+@pytest.mark.parametrize(
+    "decoded,stderr,start,match",
+    [
+        (73728 - 1152, ESTIMATED_MP3_WARNING, 0, "decoded PCM count disagree"),
+        (73728, ESTIMATED_MP3_WARNING + "Error while decoding MPEG frame\n", 0, "decode warnings"),
+        (73728, ESTIMATED_MP3_WARNING, 1, "nonzero start offset"),
+    ],
+)
+def test_unindexed_vbr_recovery_requires_complete_clean_decode(
+    monkeypatch, tmp_path, decoded, stderr, start, match
+):
+    audio = tmp_path / "vbr.mp3"
+    audio.write_bytes(unindexed_vbr_bytes())
+    value = metadata("mp3", time_base="1/44100", duration_ts=147456, start_pts=start)
+    value["packets"] = [{"pos": 0}]
+    fake_decode(monkeypatch, bytes(decoded * 4), stderr=stderr)
+    with pytest.raises(decoder.UnsupportedAudio, match=match):
+        decoder.decode(audio, tmp_path, metadata=value, ffmpeg="fake")
+
+
+def test_accurate_unindexed_mp3_retains_native_clock(monkeypatch, tmp_path):
+    audio = tmp_path / "vbr.mp3"
+    audio.write_bytes(unindexed_vbr_bytes())
+    value = metadata("mp3", time_base="1/44100", duration_ts=73727)
+    value["packets"] = [{"pos": 0}]
+    fake_decode(monkeypatch, bytes(73728 * 4), stderr=ESTIMATED_MP3_WARNING)
+    result = decoder.decode(audio, tmp_path, metadata=value, ffmpeg="fake")
+    assert result.frames == 73727 and result.decoded_frames == 73728
+    assert result.plan["clock_policy"] == "container_float32_duration"
+    result.pcm._mmap.close()
+
+
+def test_indexed_mp3_shortage_still_rejected(monkeypatch, tmp_path):
+    audio = tmp_path / "xing.mp3"
+    audio.write_bytes(xing_frame())  # Declares 100 * 1152 samples.
+    value = metadata("mp3", time_base="1/44100")
+    value["packets"] = [{"pos": 417}]
+    fake_decode(monkeypatch, bytes(1152 * 4), stderr=ESTIMATED_MP3_WARNING)
+    with pytest.raises(decoder.UnsupportedAudio, match="repair file before publication"):
+        decoder.decode(audio, tmp_path, metadata=value, ffmpeg="fake")
 
 
 def test_aac_decode_reports_start_and_trims_declared_length(monkeypatch, tmp_path):

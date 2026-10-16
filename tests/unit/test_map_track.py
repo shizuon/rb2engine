@@ -283,3 +283,18 @@ class TestMissingFieldsDegrade:
         assert len(out.quick_cues) == 8
         assert len(out.loops) == 8
         assert all(q.sample_offset == EMPTY_SAMPLE_OFFSET for q in out.quick_cues)
+
+
+def test_mapping_preserves_source_unicode_for_portable_database(tmp_path, monkeypatch):
+    import unicodedata
+
+    album = unicodedata.normalize("NFD", "ドラマ")
+    music = tmp_path / "Contents" / album / "English.mp3"
+    monkeypatch.setattr(Path, "samefile", lambda _self, _other: True)
+    src = _track(
+        raw_path="D:/Contents/ドラマ/English.mp3",
+        resolved_path=music,
+    )
+    out = map_track(src, drive_root=tmp_path, engine_library_dir=tmp_path / "Engine Library")
+    assert out.path == "../Contents/ドラマ/English.mp3"
+    assert src.resolved_path == music
