@@ -184,6 +184,7 @@ class ProvenanceRecord:
     m_db_sha256: str  # staged m.db, hashed before it crossed to the stick
     max_playlist_id: int
     max_playlist_entity_id: int
+    key_analysis_sha256: str | None = None
 
 
 @dataclass
@@ -245,6 +246,7 @@ class ConversionReport:
     # Set by build_library on a successful publish (None when the source had no
     # fingerprint, e.g. libraries not parsed from a pdb, or on fatal runs).
     provenance: ProvenanceRecord | None = None
+    key_analysis: dict[str, Any] | None = None
 
     def add_skip(
         self,
@@ -320,6 +322,7 @@ class ConversionReport:
                 for tid, loops in sorted(self.dropped_loops.items())
             },
             "path_base": self.path_base,
+            "key_analysis": self.key_analysis,
             "fatal": self.fatal,
             "fatal_message": self.fatal_message,
             "provenance": (

@@ -20,10 +20,12 @@ def render_html() -> str:
     ).replace("/* APP_JS */", (assets / "app.js").read_text(encoding="utf-8"))
 
 
-def _smoke(window: Any, service: DesktopService, output: Path, drive: str | None) -> None:
+def _smoke(
+    window: Any, service: DesktopService, output: Path, drive: str | None, analyze: bool,
+) -> None:
     """Packaged-app smoke: real renderer, bridge, DOM buttons and converter."""
     result: dict[str, Any] = {"ok": False}
-    deadline = time.monotonic() + 80
+    deadline = time.monotonic() + (180 if analyze else 80)
     try:
         while not window.evaluate_js("Boolean(window.rb2engineReady)"):
             if time.monotonic() > deadline:
@@ -31,6 +33,17 @@ def _smoke(window: Any, service: DesktopService, output: Path, drive: str | None
             time.sleep(0.1)
         result["renderer"] = window.evaluate_js("navigator.userAgent")
         result["title"] = window.evaluate_js("document.title")
+        assert window.evaluate_js("document.querySelector('#keyscan-help').hidden")
+        installed = bool(service.get_keyscan()["path"])
+        window.evaluate_js("document.querySelector('#fill-keys').click();")
+        prompt_query = "document.querySelector('#keyscan-help').hidden"
+        while bool(window.evaluate_js(prompt_query)) != installed:
+            if time.monotonic() > deadline:
+                raise TimeoutError("Incorrect OpenKeyScan installation prompt visibility")
+            time.sleep(0.1)
+        result["keyscan"] = {"installed": installed, "download_prompt_shown": not installed}
+        if not analyze:
+            window.evaluate_js("document.querySelector('#fill-keys').click();")
         if drive:
             window.evaluate_js(
                 f"document.querySelector('#path').value={json.dumps(drive)};"
@@ -52,6 +65,13 @@ def _smoke(window: Any, service: DesktopService, output: Path, drive: str | None
             if service.get_state()["status"] != "verified":
                 raise RuntimeError(service.get_state()["details"])
             result["conversion"] = service.get_state()["result"]
+            if analyze:
+                report_path = Path(result["conversion"]["report"])
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                analysis = report["key_analysis"]
+                if not analysis or not analysis["tracks"] or analysis["failures"]:
+                    raise RuntimeError(f"OpenKeyScan did not fill the test key: {analysis}")
+                result["keyscan"]["analysis"] = analysis
         result["ok"] = True
     except Exception as exc:
         result["error"] = str(exc)
@@ -78,6 +98,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="rb2engine desktop")
     parser.add_argument("--smoke-test", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--smoke-drive", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-analyzer", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if sys.platform == "win32":
         log_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "rb2engine"
@@ -92,6 +113,10 @@ def main() -> None:
         import webview
 
         service = DesktopService()
+        if args.smoke_test and args.smoke_analyzer:
+            from rb2engine.keyscan import resolve_analyzer
+
+            service._analyzer_path = str(resolve_analyzer(args.smoke_analyzer))
         window = webview.create_window(
             "rb2engine", html=render_html(), js_api=service,
             width=660, height=430, min_size=(520, 360), background_color="#f7f8f4",
@@ -104,7 +129,10 @@ def main() -> None:
         # Edge Chromium is required. Never silently fall back to obsolete MSHTML.
         options: dict[str, Any] = {"gui": "edgechromium" if sys.platform == "win32" else None}
         if args.smoke_test:
-            webview.start(_smoke, (window, service, args.smoke_test, args.smoke_drive), **options)
+            webview.start(
+                _smoke, (window, service, args.smoke_test, args.smoke_drive,
+                         bool(args.smoke_analyzer)), **options,
+            )
             if not json.loads(args.smoke_test.read_text(encoding="utf-8"))["ok"]:
                 raise SystemExit(1)
         else:

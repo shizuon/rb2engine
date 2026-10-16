@@ -56,6 +56,7 @@ class DesktopService:
         self._thread: threading.Thread | None = None
         self._inspection: dict[str, Any] | None = None
         self._window: Any = None
+        self._analyzer_path = ""
         self._state: dict[str, Any] = {
             "version": __version__, "busy": False, "status": "idle", "operation": "",
             "phase": "", "done": 0, "total": 0, "path": "", "summary": None,
@@ -81,7 +82,40 @@ class DesktopService:
     def inspect_drive(self, path: str) -> dict[str, Any]:
         return self._start("inspect", lambda: self._inspect(path))
 
-    def convert_drive(self, artwork: bool, confirmed: bool, replace: bool) -> dict[str, Any]:
+    def get_keyscan(self) -> dict[str, str]:
+        from rb2engine.keyscan import find_installed_analyzer, resolve_analyzer, saved_analyzer
+
+        if self._analyzer_path:
+            try:
+                self._analyzer_path = str(resolve_analyzer(self._analyzer_path))
+            except FatalError:
+                self._analyzer_path = ""
+        if not self._analyzer_path:
+            self._analyzer_path = saved_analyzer() or find_installed_analyzer()
+        return {"path": self._analyzer_path}
+
+    def choose_keyscan(self) -> dict[str, str]:
+        import webview
+
+        from rb2engine.keyscan import resolve_analyzer, save_analyzer
+
+        if self._window is not None and not self.get_state()["busy"]:
+            chosen = self._window.create_file_dialog(webview.FileDialog.OPEN)
+            if chosen:
+                self._analyzer_path = str(resolve_analyzer(str(chosen[0])))
+                save_analyzer(self._analyzer_path)
+        return self.get_keyscan()
+
+    def open_keyscan_download(self) -> None:
+        import webbrowser
+
+        from rb2engine.keyscan import DOWNLOAD_URL
+
+        webbrowser.open(DOWNLOAD_URL)
+
+    def convert_drive(
+        self, artwork: bool, confirmed: bool, replace: bool, fill_keys: bool = False,
+    ) -> dict[str, Any]:
         with self._lock:
             if self._inspection is None:
                 return {"ok": False, "error": "inspect_first"}
@@ -91,7 +125,9 @@ class DesktopService:
                 return {"ok": False, "error": "confirm_replace"}
             # Capture the inspected root, never accept a second arbitrary write target.
             checked = dict(self._inspection)
-            return self._start("convert", lambda: self._convert(checked, artwork, replace))
+            return self._start(
+                "convert", lambda: self._convert(checked, artwork, replace, fill_keys),
+            )
 
     def verify_drive(self) -> dict[str, Any]:
         with self._lock:
@@ -155,7 +191,9 @@ class DesktopService:
             self._inspection = {**summary, "path": str(root), "sha256": library.fingerprint.sha256}
         self._update(summary=summary, status="ready", details="\n".join(library.warnings))
 
-    def _convert(self, checked: dict[str, Any], artwork: bool, replace: bool) -> None:
+    def _convert(
+        self, checked: dict[str, Any], artwork: bool, replace: bool, fill_keys: bool,
+    ) -> None:
         root = Path(checked["path"])
         engine = root / "Engine Library"
         if (engine / "Database2" / "m.db").exists() and not replace:
@@ -167,12 +205,31 @@ class DesktopService:
                 self._inspection = None
             self._update(summary=None)
             raise FatalError("The rekordbox export changed. Inspect it again before converting.")
-        self._progress("building library", 0, 0)
         report = ConversionReport()
+        if fill_keys and any(not (t.key_name or "").strip() for t in library.tracks.values()):
+            from rb2engine.keyscan import file_hash, fill_missing_keys, resolve_analyzer
+            from rb2engine.reader.scan import scan_drive
+
+            executable = resolve_analyzer(self.get_keyscan()["path"])
+            library, report.key_analysis = fill_missing_keys(
+                library, executable, on_progress=self._progress,
+            )
+            if file_hash(scan_drive(root).export_pdb) != checked["sha256"]:
+                with self._lock:
+                    self._inspection = None
+                self._update(summary=None)
+                raise FatalError("The export changed during key analysis. Inspect it again.")
+        self._progress("building library", 0, 0)
         database = build_library(library, drive_root=root, report=report,
                                  with_artwork=artwork, on_progress=self._progress,
                                  backup_existing=True, allow_existing=replace)
         notices = list(library.warnings)
+        analysis_text = ""
+        if report.key_analysis is not None:
+            analysis = report.key_analysis
+            analysis_text = f"\nOpenKeyScan: {len(analysis['tracks'])} missing keys filled.\n"
+            notices.extend(f"OpenKeyScan track {row['track_id']}: {row['error']}"
+                           for row in analysis["failures"])
         if report.provenance is not None:
             try:
                 append_journal(engine, report.provenance)
@@ -194,7 +251,7 @@ class DesktopService:
         self._update(status="warning" if attention else "complete", summary=summary,
                      result={"database": str(database), "report": report_path,
                              "counters": counters, "verified": None},
-                     details=report.render_text() + "\n\n" + "\n".join(notices))
+                     details=report.render_text() + analysis_text + "\n\n" + "\n".join(notices))
 
     def _verify(self, checked: dict[str, Any]) -> None:
         from rb2engine.verify import verify_library

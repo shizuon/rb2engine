@@ -220,7 +220,8 @@ def _backup_database(db2: Path) -> Path | None:
             src.backup(dst)
             if dst.execute("PRAGMA quick_check").fetchone() != ("ok",):
                 raise FatalError("Database backup failed its integrity check")
-        with target.open("rb") as stream:
+        # Windows FlushFileBuffers requires a writable handle.
+        with target.open("r+b") as stream:
             os.fsync(stream.fileno())
     except (OSError, sqlite3.Error) as exc:
         raise FatalError(f"Could not back up the existing Engine database: {exc}") from exc
@@ -431,6 +432,8 @@ def _build_library_locked(
         # cli.py) adds the clock outside that boundary. The hash lives in the
         # report/journal, never inside m.db: it cannot hash itself.
         if lib.fingerprint is not None:
+            from rb2engine.keyscan import digest_record
+
             report.provenance = ProvenanceRecord(
                 pdb_sha256=lib.fingerprint.sha256,
                 pdb_size=lib.fingerprint.size,
@@ -438,6 +441,9 @@ def _build_library_locked(
                 m_db_sha256=_sha256_file(stage_path),
                 max_playlist_id=max_playlist_id,
                 max_playlist_entity_id=max_entity_id,
+                key_analysis_sha256=(
+                    digest_record(report.key_analysis) if report.key_analysis is not None else None
+                ),
             )
 
         # journal_mode=DELETE removes m.db.tmp-journal on clean close; assert.

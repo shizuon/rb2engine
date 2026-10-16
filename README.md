@@ -253,7 +253,9 @@ Still: **it's a DJ library. Back it up before you point a new tool at it.**
 **Overview generation is opt-in.** `convert` keeps its existing role.
 `waveforms prepare` generates the list preview and whole-track overview, preserving
 BPM, key, cue, loop and grid data. It does not generate the scrolling high-resolution
-waveform or analyze BPM/key/grid. Engine provides its own analysis for those.
+waveform or analyze BPM/grid. The desktop app can optionally fill missing keys
+using a separately installed [OpenKeyScan](https://www.openkeyscan.com/download).
+Existing keys are preserved. Engine provides its own analysis for other data.
 
 ## Supported versions
 

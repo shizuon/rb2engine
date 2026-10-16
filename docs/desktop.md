@@ -65,6 +65,27 @@ check actual playback on your equipment before a show.
 Waveform generation remains in the CLI and is not exposed by this GUI. The
 existing Windows waveform-generation limitation is unchanged.
 
+## Fill missing keys with OpenKeyScan
+
+Enable **Fill missing keys with OpenKeyScan** to analyze only tracks with an empty
+rekordbox key. Existing keys are preserved. The result is written to the Engine
+library and conversion report; audio tags and the rekordbox export are unchanged.
+
+Install [OpenKeyScan](https://www.openkeyscan.com/download) separately. Its analyzer
+is not bundled with rb2engine. Standard Windows and macOS installations are
+detected automatically, including Windows installer registrations. When detected,
+no download or installation prompt is shown. If the option is enabled and the
+analyzer cannot be found, **Download** and **Locate installation** appear. Select
+`OpenKeyScan.exe`, `OpenKeyScan.app`, or `openkeyscan-analyzer.exe`; a manually
+selected location is remembered for the next launch.
+
+Analysis runs locally through the installed standalone analyzer. Individual
+decoding failures leave the key empty and are listed in **Report**. Startup or
+protocol failures stop conversion before publishing a database. The report keeps
+the prediction and audio hash, paired with the publication journal, so **Verify**
+can check the enriched library without rerunning the model. A successful check
+confirms the stored result, not musical accuracy; predictions can be wrong.
+
 ## Build and test
 
 ```

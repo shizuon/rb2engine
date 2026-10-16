@@ -224,6 +224,7 @@ def test_provenance_record_carries_no_timestamp() -> None:
         "m_db_sha256",
         "max_playlist_id",
         "max_playlist_entity_id",
+        "key_analysis_sha256",
     }
 
 
