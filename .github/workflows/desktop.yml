@@ -82,7 +82,9 @@ jobs:
         run: |
           # Read the official package manifest; extract into runner temp only.
           $base = 'https://update.rekord.cloud/releases/openkeyscan/latest/'
-          [xml]$manifest = (Invoke-WebRequest ($base + 'openkeyscan.appinstaller')).Content
+          $manifestPath = "$env:RUNNER_TEMP/openkeyscan.appinstaller"
+          Invoke-WebRequest ($base + 'openkeyscan.appinstaller') -OutFile $manifestPath
+          [xml]$manifest = Get-Content $manifestPath -Raw -Encoding UTF8
           $uri = [uri]$manifest.AppInstaller.MainPackage.Uri
           if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'update.rekord.cloud') { throw 'Unexpected package host' }
           $package = "$env:RUNNER_TEMP/openkeyscan.msix"
