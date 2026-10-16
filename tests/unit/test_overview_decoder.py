@@ -308,6 +308,15 @@ def test_unindexed_vbr_scan_excludes_only_recognized_id3_tags(tmp_path):
         (struct.pack(">I", 0xFFFB94C0) + bytes(380), 0, "rate/channel changes"),
         ((struct.pack(">I", 0xFFFB90C0) + bytes(413)) * 64, 0, "variable-bitrate"),
     ],
+    ids=[
+        "partial-frame",
+        "trailing-junk",
+        "leading-junk",
+        "bad-id3",
+        "bad-header",
+        "rate-change",
+        "cbr",
+    ],
 )
 def test_unindexed_vbr_recovery_never_resyncs_or_accepts_partial_frames(tmp_path, data, pos, match):
     audio = tmp_path / "bad.mp3"

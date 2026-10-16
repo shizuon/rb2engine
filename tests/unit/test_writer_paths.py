@@ -289,8 +289,8 @@ def test_sfm_alias_is_exported_only_when_same_file(
 
     monkeypatch.setattr(paths.sys, "platform", "darwin")
     root = tmp_path
-    music = root / "Contents" / "Artist" / "w: guest*.mp3"
-    target = root / "Contents" / "Artist" / "w\uf022 guest\uf021.mp3"
+    music = root / "Contents" / "Artist" / "with: guest*.mp3"
+    target = root / "Contents" / "Artist" / "with\uf022 guest\uf021.mp3"
     monkeypatch.setattr(Path, "samefile", lambda self, other: self == target and other == music)
     assert paths._portable_special_spelling(music, root) == target
 
