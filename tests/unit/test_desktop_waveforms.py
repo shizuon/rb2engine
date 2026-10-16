@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import numpy as np
@@ -88,7 +89,7 @@ def test_reconversion_replaces_orphan_rgb_with_backup(converted, monkeypatch, tm
     monkeypatch.setattr(generator, "generate", lambda *_a, **_kw: entry)
     service.fill_waveforms(True)
     assert wait(service)["status"] == "waveforms_complete"
-    with pub.connect(database) as connection:
+    with closing(pub.connect(database)) as connection:
         uid = pub.schema(connection)
     rgb = pub.rgb_path(database, uid, 1)
     # A rebuild retains the UUID and existing RGB files while creating empty
@@ -96,6 +97,7 @@ def test_reconversion_replaces_orphan_rgb_with_backup(converted, monkeypatch, tm
     rgb.write_bytes(b"old RGB to preserve in backup")
     service.convert_drive(False, True, True, False, True)
     state = wait(service)
+    assert state["status"] in ("complete", "warning"), state
     result = state["result"]["waveforms"]
     assert result["generated"] == 1 and result["preserved"] == 0, state
     assert rgb.read_bytes() != b"old RGB to preserve in backup"
