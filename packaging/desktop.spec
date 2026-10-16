@@ -14,7 +14,10 @@ analysis = Analysis(
     [str(root / 'packaging' / 'desktop_entry.py')],
     pathex=[str(root / 'src')],
     binaries=native_binaries + collect_dynamic_libs('onnxruntime'),
-    datas=collect_data_files('rb2engine', include_py_files=True),
+    # Modules already live in the frozen archive. Only waveform sources are
+    # also data: implementation_digest hashes them to invalidate old caches.
+    datas=(collect_data_files('rb2engine') + collect_data_files(
+        'rb2engine', include_py_files=True, includes=['overviews/*.py'])),
     hiddenimports=['webview'],
     hookspath=[],
     excludes=['PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'tkinter', 'IPython', 'pytest', 'mutagen'],

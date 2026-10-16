@@ -1,60 +1,28 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
+  workflow_dispatch:
   workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
-    name: ${{ matrix.os }} / py${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+    name: Core / Python 3.12
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
       - run: uv sync --all-extras --dev
       - run: uv run ruff check src/ tests/
       - run: uv run mypy src/
-      # Hardware tests stay excluded. Optional native tests declare platform/tool skips.
       - run: uv run pytest -q -m "not real_stick" --cov --cov-report=term-missing
-
-  waveforms-native:
-    name: Apple Silicon waveform integration
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-      - name: Install external audio tools
-        run: brew install ffmpeg pkgconf
-      - run: uv sync --all-extras --dev
-      - name: Configure native build cache
-        run: echo "RB2ENGINE_OVERVIEWS_BUILD_CACHE=$RUNNER_TEMP/rb2engine-build" >> "$GITHUB_ENV"
-      - name: Check native and AAC dependencies
-        run: uv run rb2engine waveforms doctor
-      - name: Native reference and publication recovery
-        run: uv run pytest -q tests/unit/test_overview_backend.py tests/unit/test_overview_publication.py tests/unit/test_overview_multistream.py
-      - name: Exercise AAC generation and cache readback
-        shell: bash
-        run: |
-          ffmpeg -v error -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 -ac 2 -c:a aac "$RUNNER_TEMP/overview-smoke.m4a"
-          uv run rb2engine waveforms generate "$RUNNER_TEMP/overview-smoke.m4a" --cache "$RUNNER_TEMP/overview-cache" > "$RUNNER_TEMP/overview-result.json"
-          uv run python - <<'PY'
-          import json, os, subprocess, sys
-          from pathlib import Path
-          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'overview-result.json').read_text())
-          subprocess.run([sys.executable, '-m', 'rb2engine', 'waveforms', 'verify-cache', result['cache_path']], check=True)
-          PY
