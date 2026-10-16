@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import sys
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -144,13 +145,7 @@ def test_nested_contents_path_preserves_structure(tmp_path: Path) -> None:
     """Deep artist/album trees must not be collapsed or re-rooted incorrectly."""
     drive_root = tmp_path / "stick"
     engine_library_dir = drive_root / "Engine Library"
-    music_abs = (
-        drive_root
-        / "Contents"
-        / "Artist"
-        / "Album"
-        / "Track Name.mp3"
-    )
+    music_abs = drive_root / "Contents" / "Artist" / "Album" / "Track Name.mp3"
     music_abs.parent.mkdir(parents=True)
     music_abs.write_bytes(b"x")
     engine_library_dir.mkdir(parents=True)
@@ -211,3 +206,114 @@ def test_unknown_base_raises(tmp_path: Path) -> None:
             engine_library_dir=engine_library_dir,
             base="music-folder",
         )
+
+
+@pytest.mark.parametrize("same_file", [True, False])
+def test_export_spelling_survives_host_normalization(tmp_path, monkeypatch, same_file):
+    """A FAT host's decomposed listing must not replace the portable source name."""
+    import unicodedata
+
+    host_name = unicodedata.normalize("NFD", "ドラマ")
+    music = tmp_path / "Contents" / host_name / "English Title.mp3"
+    source = "D:/Contents/ドラマ/English Title.mp3"
+    monkeypatch.setattr(Path, "samefile", lambda _self, _other: same_file)
+    result = engine_track_path(
+        music,
+        drive_root=tmp_path,
+        engine_library_dir=tmp_path / "Engine Library",
+        source_path=source,
+    )
+    expected = "ドラマ" if same_file else host_name
+    assert result == f"../Contents/{expected}/English Title.mp3"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "D:/Contents/Other/track.mp3",
+        "D:/Contents/../outside/track.mp3",
+        "D:/Contents/artist/track.mp3",
+        "D:/Elsewhere/Artist/track.mp3",
+    ],
+)
+def test_source_hint_cannot_redirect_or_change_casing(tmp_path, source):
+    music = tmp_path / "Contents" / "Artist" / "track.mp3"
+    assert (
+        engine_track_path(
+            music,
+            drive_root=tmp_path,
+            engine_library_dir=tmp_path / "Engine Library",
+            source_path=source,
+        )
+        == "../Contents/Artist/track.mp3"
+    )
+
+
+def test_missing_source_spelling_keeps_resolved_path(tmp_path):
+    import unicodedata
+
+    folder = unicodedata.normalize("NFD", "ドラマ")
+    music = tmp_path / "Contents" / folder / "track.mp3"
+    assert (
+        engine_track_path(
+            music,
+            drive_root=tmp_path,
+            engine_library_dir=tmp_path / "Engine Library",
+            source_path="D:/Contents/ドラマ/track.mp3",
+        )
+        == f"../Contents/{folder}/track.mp3"
+    )
+
+
+def test_unicode_preservation_also_corrects_source_casing(tmp_path, monkeypatch):
+    import unicodedata
+
+    host_name = unicodedata.normalize("NFD", "ドラマ")
+    music = tmp_path / "Contents" / "ARTIST" / host_name / "English.mp3"
+    monkeypatch.setattr(Path, "samefile", lambda _self, _other: True)
+    assert (
+        engine_track_path(
+            music,
+            drive_root=tmp_path,
+            engine_library_dir=tmp_path / "Engine Library",
+            source_path="D:/Contents/Artist/ドラマ/English.mp3",
+        )
+        == "../Contents/ARTIST/ドラマ/English.mp3"
+    )
+
+
+def test_sfm_alias_is_exported_only_when_same_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rb2engine.writer import paths
+
+    monkeypatch.setattr(paths.sys, "platform", "darwin")
+    root = tmp_path
+    music = root / "Contents" / "Artist" / "with: guest*.mp3"
+    target = root / "Contents" / "Artist" / "with\uf022 guest\uf021.mp3"
+    monkeypatch.setattr(Path, "samefile", lambda self, other: self == target and other == music)
+    assert paths._portable_special_spelling(music, root) == target
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows rejects literal colons")
+def test_literal_colon_is_not_blindly_rewritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rb2engine.writer import paths
+
+    monkeypatch.setattr(paths.sys, "platform", "darwin")
+    music = tmp_path / "literal: name.mp3"
+    music.write_bytes(b"original")
+    (tmp_path / "literal\uf022 name.mp3").write_bytes(b"other file")
+    assert paths._portable_special_spelling(music, tmp_path) == music
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows rejects literal colons")
+def test_sfm_symlink_alias_is_not_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rb2engine.writer import paths
+
+    monkeypatch.setattr(paths.sys, "platform", "darwin")
+    music = tmp_path / "literal: name.mp3"
+    music.write_bytes(b"original")
+    (tmp_path / "literal\uf022 name.mp3").symlink_to(music)
+    assert paths._portable_special_spelling(music, tmp_path) == music

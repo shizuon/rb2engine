@@ -105,6 +105,7 @@ def _map_path(
             Path(src.resolved_path),
             drive_root=Path(drive_root),
             engine_library_dir=Path(engine_library_dir),
+            source_path=src.raw_path,
         )
     except ValueError:
         # Outside drive root or geometry mismatch — degrade to raw_path.

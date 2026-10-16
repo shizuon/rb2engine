@@ -1,13 +1,16 @@
-# rb2engine — Last-Xuan-ai fork
+# rb2engine — shizuon fork
 
-[![CI](https://github.com/Last-Xuan-ai/rb2engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Last-Xuan-ai/rb2engine/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Last-Xuan-ai/rb2engine)](https://github.com/Last-Xuan-ai/rb2engine/releases)
+[![CI](https://github.com/shizuon/rb2engine/actions/workflows/ci.yml/badge.svg)](https://github.com/shizuon/rb2engine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/shizuon/rb2engine)](https://github.com/shizuon/rb2engine/releases)
 
 This fork builds on [J.R. Gutierrez's rb2engine](https://github.com/jrgutier/rb2engine).
-Version 0.6.0 adds optional Engine overview generation, Lexicon export compatibility,
-faster playlist checks, and fixes for manually positioned beats and ID3v2.4 artwork.
+Version 0.6.1 retains the verified overview generation and conversion fixes from
+[the previous fork](https://github.com/Last-Xuan-ai/rb2engine), and adds conservative
+unindexed VBR duration recovery and portable Unicode/SFM path handling.
+Special-name aliases are used only when they resolve to the same file; this does
+not rename audio or certify Windows application or physical-player compatibility.
 The upstream PyPI package remains separately maintained; install this fork from its
-[GitHub releases](https://github.com/Last-Xuan-ai/rb2engine/releases) or source.
+[GitHub releases](https://github.com/shizuon/rb2engine/releases) or source.
 
 Convert a **rekordbox** USB export into an **Engine DJ** library — on the same stick, in place, without duplicating a single audio file.
 
@@ -55,7 +58,7 @@ audio copy. The fork's overview evidence is reported separately below.
 ## Install
 
 ```bash
-python -m pip install "rb2engine @ git+https://github.com/Last-Xuan-ai/rb2engine.git@v0.6.0"
+python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@v0.6.1"
 ```
 
 Requires Python 3.11+. Base conversion works on macOS, Windows and Linux. The
@@ -64,12 +67,12 @@ is explicitly unsupported. Native overview comparisons were performed on Apple
 Silicon macOS, not on every supported build platform.
 
 To install from a release artifact, download the wheel from this fork's Releases
-page and run `python -m pip install /path/to/rb2engine-0.6.0-py3-none-any.whl`.
+page and run `python -m pip install /path/to/rb2engine-0.6.1-py3-none-any.whl`.
 
 From source:
 
 ```bash
-git clone https://github.com/Last-Xuan-ai/rb2engine
+git clone https://github.com/shizuon/rb2engine
 cd rb2engine
 uv sync
 uv run rb2engine --help
@@ -155,7 +158,7 @@ Install the extra plus external tools first; macOS needs Xcode Command Line Tool
 FFmpeg and pkg-config. See [complete setup and commands](docs/waveforms.md).
 
 ```bash
-python -m pip install "rb2engine[waveforms] @ git+https://github.com/Last-Xuan-ai/rb2engine.git@v0.6.0"
+python -m pip install "rb2engine[waveforms] @ git+https://github.com/shizuon/rb2engine.git@v0.6.1"
 brew install ffmpeg pkgconf
 rb2engine waveforms doctor
 

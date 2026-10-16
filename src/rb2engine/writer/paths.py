@@ -11,6 +11,8 @@ absolute is reachable only when explicitly requested and can never be default.
 
 from __future__ import annotations
 
+import sys
+import unicodedata
 from pathlib import Path, PurePosixPath
 
 # Compiled-in default for --path-base. Must never be "absolute" (C-MAJOR-2).
@@ -25,6 +27,7 @@ def engine_track_path(
     drive_root: Path,
     engine_library_dir: Path,
     base: str = "engine-lib",
+    source_path: str | None = None,
 ) -> str:
     """Return the string stored in Track.path (always forward-slash).
 
@@ -59,6 +62,14 @@ def engine_track_path(
     if base == "absolute":
         return music.as_posix()
 
+    # macOS FAT enumeration can decompose names even when the FAT directory
+    # entry and export.pdb contain composed names. Keep the export spelling
+    # for a portable database, but only after proving it opens the same file.
+    # Local I/O continues to use SourceTrack.resolved_path.
+    if source_path:
+        music = _source_spelling(music, root, source_path)
+    music = _portable_special_spelling(music, root)
+
     if base == "drive-root":
         rel = music.relative_to(root)
         return PurePosixPath(*rel.parts).as_posix()
@@ -79,10 +90,69 @@ def engine_track_path(
     try:
         lib_from_root = lib.relative_to(root)
     except ValueError as exc:
-        raise ValueError(
-            f"engine_library_dir {lib} is outside drive_root {root}."
-        ) from exc
+        raise ValueError(f"engine_library_dir {lib} is outside drive_root {root}.") from exc
 
     ups = len(lib_from_root.parts)
     parts = ("..",) * ups + tuple(rel.parts)
     return PurePosixPath(*parts).as_posix() if parts else "."
+
+
+def _portable_special_spelling(music: Path, root: Path) -> Path:
+    """Preserve the SFM spelling hidden by macOS FAT/SMB filename lookup.
+
+    Do not translate ordinary APFS/Linux names. Require that the encoded
+    spelling already resolves to the same non-symlink file before emitting it.
+    Local audio I/O still uses the reader's original resolved path.
+    """
+    if sys.platform != "darwin":
+        return music
+    mapping = {code: 0xF020 + i for i, code in enumerate((34, 42, 58, 60, 62, 63, 92, 124))}
+    parts = []
+    for part in music.relative_to(root).parts:
+        encoded = part.translate(mapping)
+        if encoded.endswith(" "):
+            encoded = encoded[:-1] + "\uf028"
+        elif encoded.endswith("."):
+            encoded = encoded[:-1] + "\uf029"
+        parts.append(encoded)
+    candidate = root.joinpath(*parts)
+    if candidate == music:
+        return music
+    try:
+        return candidate if not candidate.is_symlink() and candidate.samefile(music) else music
+    except OSError:
+        return music
+
+
+def _source_spelling(music: Path, root: Path, source_path: str) -> Path:
+    parts = PurePosixPath(source_path.replace("\\", "/")).parts
+    index = next((i for i, part in enumerate(parts) if part.lower() == "contents"), None)
+    if index is None:
+        return music
+    source = parts[index:]
+    actual = music.relative_to(root).parts
+    if len(source) != len(actual) or ".." in source:
+        return music
+    # Do not let a stale source path redirect a track or overwrite real casing.
+    if any(
+        unicodedata.normalize("NFC", a).lower() != unicodedata.normalize("NFC", b).lower()
+        for a, b in zip(source, actual, strict=True)
+    ):
+        return music
+    portable = []
+    for source_part, actual_part in zip(source, actual, strict=True):
+        if unicodedata.normalize("NFC", source_part) == unicodedata.normalize("NFC", actual_part):
+            portable.append(source_part)
+        elif unicodedata.is_normalized("NFC", source_part):
+            portable.append(unicodedata.normalize("NFC", actual_part))
+        elif unicodedata.is_normalized("NFD", source_part):
+            portable.append(unicodedata.normalize("NFD", actual_part))
+        else:
+            portable.append(actual_part)
+    candidate = root.joinpath(*portable)
+    try:
+        return candidate if candidate.samefile(music) else music
+    except OSError:
+        # On a normalization-sensitive filesystem only the resolved name may
+        # exist. Never manufacture an unopenable path in that case.
+        return music

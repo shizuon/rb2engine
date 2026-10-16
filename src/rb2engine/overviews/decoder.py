@@ -135,6 +135,64 @@ def mp3_info(path, first_packet):
     return None
 
 
+def unindexed_mp3_frames(path, first_packet, rate, channels):
+    """Count a complete, contiguous VBR stream; never resync across damage.
+
+    Without Xing/VBRI, FFmpeg may estimate duration from early-frame bitrate.
+    This fallback accepts only a plain MPEG Layer III stream with optional
+    leading ID3v2 / trailing ID3v1 tags. Unknown bytes and partial frames fail.
+    The caller must also compare this count with the complete decoded PCM.
+    """
+    if "pos" not in first_packet:
+        raise UnsupportedAudio("Cannot verify unindexed MP3 without first packet position")
+    first = int(first_packet["pos"])
+    end = Path(path).stat().st_size
+    count = samples = 0
+    bitrates = set()
+    with Path(path).open("rb") as f:
+        # ffprobe may skip corrupt leading data. Accept only parsed ID3 tags.
+        at = 0
+        while at < first:
+            f.seek(at)
+            tag = f.read(10)
+            if (
+                len(tag) != 10
+                or tag[:3] != b"ID3"
+                or tag[3] not in (2, 3, 4)
+                or any(b & 128 for b in tag[6:10])
+            ):
+                raise UnsupportedAudio("Unrecognized bytes before unindexed MP3 audio")
+            length = 0
+            for b in tag[6:10]:
+                length = (length << 7) | b
+            at += 10 + length + (10 if tag[3] == 4 and tag[5] & 16 else 0)
+        if at != first:
+            raise UnsupportedAudio("ID3 length does not match first MP3 packet")
+        if end >= 128:
+            f.seek(end - 128)
+            if f.read(3) == b"TAG":
+                end -= 128
+        while at < end:
+            f.seek(at)
+            raw = f.read(4)
+            word = int.from_bytes(raw, "big")
+            header = mpeg_header(word) if len(raw) == 4 else None
+            if not header or at + header["frame_bytes"] > end:
+                raise UnsupportedAudio(f"Invalid or incomplete MP3 frame at byte {at}")
+            frame_channels = 1 if (word >> 6) & 3 == 3 else 2
+            if header["rate"] != rate or frame_channels != channels:
+                raise UnsupportedAudio("MP3 rate/channel changes within stream")
+            if samples and samples != header["samples_per_frame"]:
+                raise UnsupportedAudio("MP3 version changes within stream")
+            samples = header["samples_per_frame"]
+            bitrates.add((word >> 12) & 15)
+            count += 1
+            at += header["frame_bytes"]
+    if not count or len(bitrates) < 2:
+        raise UnsupportedAudio("Duration recovery requires a complete variable-bitrate MP3")
+    return {"mpeg_frames": count, "samples_per_frame": samples, "sample_frames": count * samples}
+
+
 def round_fraction(value):
     return int(value + Fraction(1, 2))
 
@@ -351,6 +409,31 @@ def decode(path, scratch, *, metadata=None, aac_reader=None, ffmpeg=None):
     physical = pcmfile.stat().st_size // frame_bytes
     declared = plan["declared_frames"] or physical
     warnings = [line for line in result.stderr.splitlines() if line.strip()]
+    estimate_warning = "Estimating duration from bitrate, this may be inaccurate"
+    if (
+        plan["codec"] == "mp3"
+        and plan["mpeg_info"] is None
+        and abs(declared - physical) > max(plan["rate"], declared // 100)
+        and any(line.endswith(estimate_warning) for line in warnings)
+    ):
+        if plan["reader_start_offset"] or any(
+            not line.endswith(estimate_warning) for line in warnings
+        ):
+            raise UnsupportedAudio("Unindexed MP3 has decode warnings or a nonzero start offset")
+        packets = metadata.get("packets", [])
+        scan = unindexed_mp3_frames(
+            path, packets[0] if packets else {}, plan["rate"], plan["channels"]
+        )
+        if scan["sample_frames"] != physical:
+            raise UnsupportedAudio("MP3 frame scan and decoded PCM count disagree")
+        plan["estimated_frames_before_recovery"] = declared
+        plan["clock_policy_before_recovery"] = plan["clock_policy"]
+        plan["mpeg_frame_scan"] = scan
+        plan["clock_policy"] = "mpeg_unindexed_vbr_verified_frame_count"
+        plan["declared_frames"] = declared = physical
+        warnings.append(
+            "Unindexed VBR MP3 duration recovered from complete MPEG frames and decoded PCM"
+        )
     if declared > physical:
         shortage = declared - physical
         if shortage > max(plan["rate"], declared // 100):

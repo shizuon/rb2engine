@@ -1,6 +1,6 @@
 [project]
 name = "rb2engine"
-version = "0.6.0"
+version = "0.6.1"
 description = "Convert a rekordbox USB export into an Engine DJ library, in place, without duplicating your music"
 readme = "README.md"
 license = "MIT"
@@ -39,9 +39,9 @@ dependencies = [
 waveforms = ["numpy>=1.26,<3"]  # BSD-3-Clause
 
 [project.urls]
-Homepage = "https://github.com/Last-Xuan-ai/rb2engine"
-Repository = "https://github.com/Last-Xuan-ai/rb2engine"
-Issues = "https://github.com/Last-Xuan-ai/rb2engine/issues"
+Homepage = "https://github.com/shizuon/rb2engine"
+Repository = "https://github.com/shizuon/rb2engine"
+Issues = "https://github.com/shizuon/rb2engine/issues"
 
 [project.scripts]
 rb2engine = "rb2engine.cli:main"

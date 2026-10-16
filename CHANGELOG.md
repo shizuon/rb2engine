@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-10-16
+
+### Fixed
+
+- Retain macOS FAT/SMB special-character aliases only when the SFM spelling
+  resolves to the same non-symlink file. Ordinary filenames are not rewritten.
+
+- Preserve source Unicode spelling in portable track paths when macOS FAT
+  enumeration decomposes names. Retain actual filename casing and require the
+  proposed spelling to open the same file before storing it.
+
+- Recover materially inaccurate duration estimates for unindexed VBR MP3 files
+  only when a complete MPEG frame scan agrees exactly with decoded PCM. Keep
+  indexed/native clocks and reject partial frames, skipped junk, stream changes,
+  decode warnings and inconsistent sample counts.
+
+### Changed
+
+- Publish this continuation from `shizuon/rb2engine`, preserving the previous
+  fork history and GitHub-only package releases.
+
 ## [0.6.0] - 2026-10-10
 
 First release of the Last-Xuan-ai fork, based on upstream 0.5.0.
