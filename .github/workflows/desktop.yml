@@ -62,6 +62,19 @@ jobs:
           uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
       - name: Build standalone application
         run: uv run pyinstaller --noconfirm packaging/desktop.spec
+      - name: Verify macOS bundle version
+        if: runner.os == 'macOS'
+        run: |
+          uv run python - <<'PY'
+          import plistlib
+          from importlib.metadata import version
+          from pathlib import Path
+          info = plistlib.loads(Path('dist/rb2engine.app/Contents/Info.plist').read_bytes())
+          expected = version('rb2engine')
+          assert info['CFBundleShortVersionString'] == expected, info
+          assert info['CFBundleVersion'] == expected, info
+          print(f'macOS bundle version verified: {expected}')
+          PY
       - name: Create authored test export with a Unicode and URI-sensitive root
         shell: bash
         run: |

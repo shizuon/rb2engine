@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.2] - 2026-10-17
+
+### Fixed
+
+- Populate the macOS Finder and bundle version fields from the installed
+  package version. Previous desktop bundles retained PyInstaller's `0.0.0`
+  default even though the contained application had the correct version.
+- Check both fields in the actual built app before smoke testing and archiving.
+
+Includes all 0.7.1 downbeat, optional-analysis and artwork fixes.
+
 ## [0.7.1] - 2026-10-17
 
 ### Fixed
