@@ -7,6 +7,7 @@ import dataclasses
 import json
 import sqlite3
 import sys
+from contextlib import closing
 
 import numpy as np
 import pytest
@@ -192,7 +193,7 @@ def test_conversion_verify_mutation_and_restoration(library, monkeypatch):
     assert "Grid repair (majority)" in state["details"]
     assert verify_library(root).exit_code == 0
     database = root / "Engine Library/Database2/m.db"
-    with sqlite3.connect(database) as conn:
+    with closing(sqlite3.connect(database)) as conn, conn:
         original_blob, cues = conn.execute(
             "SELECT beatData, quickCues FROM PerformanceData"
         ).fetchone()
@@ -213,7 +214,7 @@ def test_conversion_verify_mutation_and_restoration(library, monkeypatch):
     service.convert_drive(False, True, True)
     assert wait(service)["status"] in ("complete", "warning")
     assert verify_library(root).exit_code == 0
-    with sqlite3.connect(database) as conn:
+    with closing(sqlite3.connect(database)) as conn, conn:
         blob, restored_cues = conn.execute(
             "SELECT beatData, quickCues FROM PerformanceData"
         ).fetchone()
