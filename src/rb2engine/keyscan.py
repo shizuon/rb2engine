@@ -99,6 +99,31 @@ def _windows_install_roots() -> list[Path]:
     return roots
 
 
+def _windows_msix_roots() -> list[Path]:
+    """The official Windows installer currently installs an MSIX package."""
+    if sys.platform != "win32":
+        return []
+    system = os.environ.get("SYSTEMROOT")
+    if not system:
+        return []
+    powershell = Path(system) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    script = (
+        "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); "
+        "Get-AppxPackage -Name Openkeyscan | Select-Object -ExpandProperty InstallLocation"
+    )
+    process = None
+    try:
+        process = _spawn([str(powershell), "-NoProfile", "-NonInteractive", "-Command", script],
+                         subprocess.DEVNULL)
+        output, _ = process.communicate(timeout=10)
+        return [Path(line.strip()) for line in output.splitlines() if line.strip()]
+    except (OSError, subprocess.TimeoutExpired):
+        if process is not None:
+            process.kill()
+            process.communicate()
+        return []
+
+
 def find_installed_analyzer() -> str:
     roots = [Path("/Applications/OpenKeyScan.app"), Path.home() / "Applications/OpenKeyScan.app"]
     if sys.platform == "win32":
@@ -107,6 +132,7 @@ def find_installed_analyzer() -> str:
             ("PROGRAMFILES", "OpenKeyScan"), ("PROGRAMFILES(X86)", "OpenKeyScan"),
         ) if (value := os.environ.get(key))]
         roots.extend(_windows_install_roots())
+        roots.extend(_windows_msix_roots())
     for root in roots:
         try:
             return str(resolve_analyzer(str(root)))

@@ -80,18 +80,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Extract the vendor installer only into runner temp; never bundle it.
-          $installer = "$env:RUNNER_TEMP/OpenKeyScan-Installer.exe"
-          Invoke-WebRequest 'https://update.rekord.cloud/releases/openkeyscan/latest/OpenKeyScan-Installer.exe' -OutFile $installer
-          $seven = 'C:/Program Files/7-Zip/7z.exe'
-          $unpack = "$env:RUNNER_TEMP/keyscan-installer"
-          & $seven x $installer "-o$unpack" -y | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Could not extract OpenKeyScan installer' }
-          $payload = Get-ChildItem $unpack -Recurse -Filter 'app-64.7z' | Select-Object -First 1
-          if (!$payload) { throw 'OpenKeyScan installer layout changed' }
+          # Read the official package manifest; extract into runner temp only.
+          $base = 'https://update.rekord.cloud/releases/openkeyscan/latest/'
+          [xml]$manifest = (Invoke-WebRequest ($base + 'openkeyscan.appinstaller')).Content
+          $uri = [uri]$manifest.AppInstaller.MainPackage.Uri
+          if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'update.rekord.cloud') { throw 'Unexpected package host' }
+          $package = "$env:RUNNER_TEMP/openkeyscan.msix"
+          Invoke-WebRequest $uri.AbsoluteUri -OutFile $package
           $app = "$env:RUNNER_TEMP/OpenKeyScan"
-          & $seven x $payload.FullName "-o$app" -y | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Could not extract OpenKeyScan app' }
+          & 'C:/Program Files/7-Zip/7z.exe' x $package "-o$app" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract OpenKeyScan MSIX' }
           $analyzer = Get-ChildItem $app -Recurse -Filter 'openkeyscan-analyzer.exe' | Select-Object -First 1
           if (!$analyzer) { throw 'OpenKeyScan analyzer missing' }
           $out = "$env:RUNNER_TEMP/keyscan-smoke.json"

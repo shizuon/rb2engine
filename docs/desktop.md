@@ -73,7 +73,7 @@ library and conversion report; audio tags and the rekordbox export are unchanged
 
 Install [OpenKeyScan](https://www.openkeyscan.com/download) separately. Its analyzer
 is not bundled with rb2engine. Standard Windows and macOS installations are
-detected automatically, including Windows installer registrations. When detected,
+detected automatically, including Windows MSIX packages and installer registrations. When detected,
 no download or installation prompt is shown. If the option is enabled and the
 analyzer cannot be found, **Download** and **Locate installation** appear. Select
 `OpenKeyScan.exe`, `OpenKeyScan.app`, or `openkeyscan-analyzer.exe`; a manually
