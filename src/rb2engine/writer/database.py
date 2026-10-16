@@ -31,7 +31,7 @@ def detect_schema(m_db_path: Path) -> tuple[int, int, int] | None:
     if not path.is_file():
         return None
     try:
-        conn = sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     except sqlite3.Error:
         return None
     try:

@@ -259,13 +259,30 @@ def verify_library(
 
     source = read_library(drive_root, with_anlz=True, with_artwork=with_artwork)
     engine_lib = drive_root / ENGINE_LIBRARY_DIRNAME
+    recorded, _ = _load_recorded_provenance(engine_lib)
+    # Predictions are an additional input, never an exemption from key checks.
+    # Replay only a manifest paired to this source and hashed at publication.
+    if (recorded and recorded.get("key_analysis_sha256")
+            and source.fingerprint is not None
+            and source.fingerprint.sha256 == recorded.get("pdb_sha256")):
+        from rb2engine.keyscan import digest_record, replay_keys
+
+        try:
+            payload = json.loads((engine_lib / REPORT_FILENAME).read_text(encoding="utf-8"))
+            analysis = payload.get("key_analysis") if isinstance(payload, dict) else None
+            if (not isinstance(analysis, dict)
+                    or digest_record(analysis) != recorded["key_analysis_sha256"]):
+                raise FatalError("OpenKeyScan analysis record is missing or changed; cannot verify")
+            source = replay_keys(source, analysis)
+        except (OSError, ValueError) as exc:
+            raise FatalError(f"Cannot read OpenKeyScan verification record: {exc}") from exc
 
     # Hash the m.db BEFORE decoding it: this is the "which oracle moved"
     # question, and it must be answered against the same bytes we then verify.
     with m_db_path.open("rb") as fh:
         m_db_sha256 = hashlib.file_digest(fh, "sha256").hexdigest()
 
-    conn = sqlite3.connect(f"file:{m_db_path.resolve()}?mode=ro", uri=True)
+    conn = sqlite3.connect(m_db_path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
         result = _verify_against_open_db(
             source,

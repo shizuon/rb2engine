@@ -6,13 +6,15 @@ Licensed under the MIT License. See LICENSE.
 This fork preserves the upstream copyright and MIT license. Its additions
 are maintained at https://github.com/Last-Xuan-ai/rb2engine.
 
-The Python dependencies are installed separately, not vendored:
+Source/wheel installs resolve Python dependencies separately. Desktop packages
+bundle them and include their installed license texts under licenses/:
 
   construct     MIT           binary parsing of export.pdb
   pyrekordbox   MIT           ANLZ tag structures
   click         BSD-3-Clause  command-line interface
   rich          MIT           human-readable output
-  numpy         BSD-3-Clause  optional waveform processing
+  numpy         BSD-3-Clause  waveform processing
+  pywebview     BSD-3-Clause  optional desktop UI
 
 mutagen (GPL-2.0-or-later) is a DEVELOPMENT dependency only. It is used
 exclusively in the test suite as an independent oracle confirming that
@@ -20,9 +22,9 @@ exclusively in the test suite as an independent oracle confirming that
 imported by any module under `src/`, is not required at runtime, and is not
 included in release artifacts.
 
-Optional FFmpeg runtime
------------------------
-Waveform generation executes the user's separately installed ffmpeg/ffprobe.
+FFmpeg runtime
+--------------
+Source/wheel waveform generation executes separately installed ffmpeg/ffprobe.
 The project's AAC helper source compiles locally and dynamically links the
 user's libavformat, libavcodec and libavutil. These libraries are real runtime
 dependencies, not merely format references. No FFmpeg source, binary, linked
@@ -35,6 +37,14 @@ terms; the MIT license for this project's source does not relicense FFmpeg.
 Redistributing a compiled helper or FFmpeg libraries requires examining that
 build's terms, notices and corresponding-source obligations. See:
   https://ffmpeg.org/legal.html
+
+Desktop distributions bundle a minimal FFmpeg 8.0.3 build with GPL, nonfree,
+networking and external codec components disabled. The AAC helper dynamically
+links its replaceable LGPL libraries. The complete FFmpeg source tarball,
+LGPLv2.1 text, exact configuration, helper source and build script are included
+under licenses/FFmpeg in each desktop archive. No Engine private library or
+commercial audio is included. Windows GCC support libraries, when included,
+retain their respective runtime-exception/license notices under licenses/.
 
 The projects below informed this work but are NOT included, copied, linked
 against, or redistributed here. They are credited because interoperability

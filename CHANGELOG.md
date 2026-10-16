@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-10-17
+
+### Added
+
+- Minimal optional desktop UI with Chinese/English, native folder selection,
+  real phase progress, conversion and verification. Details stay collapsed.
+- Windows x64 and macOS Apple Silicon standalone builds with native-renderer
+  smoke tests. Windows packages include the signed WebView2 bootstrapper.
+- Desktop rebuilds back up the existing Engine database under the writer lock,
+  refuse unconfirmed replacement and block window closure during an operation.
+- Optional OpenKeyScan completion of missing keys with installed-analyzer
+  detection, remembered locations, source hashes and verification provenance.
+- Desktop whole-track overview completion during conversion or in an existing
+  Engine library, with bundled Windows/macOS FFmpeg, AAC and DSP components.
+- Complete GitHub releases containing both desktop builds and Python packages,
+  gated by their checks and published with combined SHA-256 checksums.
+
+### Fixed
+
+- Encode SQLite read-only URIs so Windows/macOS paths containing spaces,
+  Unicode, percent or hash characters open the intended database.
+- Use explicit UTF-8 for waveform caches and publication plans on Windows.
+- Back up and regenerate orphaned RGB files after an explicit full reconversion,
+  while preserving existing waveforms during standalone completion.
+
 ## [0.6.1] - 2026-10-16
 
 ### Fixed

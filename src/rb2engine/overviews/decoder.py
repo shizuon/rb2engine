@@ -10,12 +10,17 @@ from pathlib import Path
 
 import numpy as np
 
+from .runtime import binary, subprocess_options
+
 
 class UnsupportedAudio(ValueError):
     pass
 
 
 def executable(name):
+    bundled = binary(name)
+    if bundled is not None:
+        return str(bundled)
     found = shutil.which(name)
     if not found and Path("/opt/homebrew/bin", name).is_file():
         found = str(Path("/opt/homebrew/bin", name))
@@ -45,7 +50,7 @@ def probe(path, *, ffprobe=None):
         str(path),
     ]
     result = subprocess.run(  # noqa: S603 - argument vector; no shell
-        command, capture_output=True, text=True, timeout=45, check=False
+        command, capture_output=True, text=True, timeout=45, check=False, **subprocess_options()
     )
     if result.returncode:
         raise ValueError(f"ffprobe could not read audio: {result.stderr[-2000:]}")
@@ -385,7 +390,7 @@ def decode(path, scratch, *, metadata=None, aac_reader=None, ffmpeg=None):
             str(pcmfile),
         ]
     result = subprocess.run(  # noqa: S603 - argument vector; no shell
-        command, capture_output=True, text=True, check=False
+        command, capture_output=True, text=True, check=False, **subprocess_options()
     )
     if result.returncode:
         raise ValueError(f"Audio decode failed: {result.stderr[-3000:]}")
@@ -394,7 +399,7 @@ def decode(path, scratch, *, metadata=None, aac_reader=None, ffmpeg=None):
     if not size or size % frame_bytes:
         raise ValueError("Empty or incomplete decoded PCM")
     if plan["codec"] == "aac":
-        plan["aac_bootstrap"] = json.loads(bootstrap_report.read_text())
+        plan["aac_bootstrap"] = json.loads(bootstrap_report.read_text(encoding="utf-8"))
         bootstrap_report.unlink()
         frame_metadata = plan["aac_bootstrap"].pop("frames")
         start_offset = native_frames(

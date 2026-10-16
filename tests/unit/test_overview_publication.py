@@ -82,33 +82,7 @@ class PublicationTests(unittest.TestCase):
 
     def setUp(self):
         self.real_platform_guard = pub.writable_platform
-        # The shipping guard is separately exercised without this patch below.
-        # Windows still runs real SQLite, file locks, backup and recovery. The
-        # product support guard and backup-handle access mode are adapted only
-        # inside this contract fixture; the real guard has its own tests below.
-        if platform.system() == "Windows":
-            guard = patch.object(pub, "writable_platform", return_value=None)
-            guard.start()
-            self.addCleanup(guard.stop)
         self.folder = Path(tempfile.mkdtemp(dir=self.root))
-        if platform.system() == "Windows":
-            # Windows cannot fsync a read-only descriptor. The production
-            # operation is POSIX-only, so give only this fixture's SQLite backup
-            # files writable handles and keep the actual fsync call intact.
-            original_open = Path.open
-
-            def open_fixture_backup(path, mode="r", *args, **kwargs):
-                if (
-                    mode == "rb"
-                    and path.name == "before.sqlite3"
-                    and path.is_relative_to(self.folder)
-                ):
-                    mode = "r+b"
-                return original_open(path, mode, *args, **kwargs)
-
-            backup_handles = patch.object(Path, "open", open_fixture_backup)
-            backup_handles.start()
-            self.addCleanup(backup_handles.stop)
         self.db = self.folder / "Engine Library/Database2/m.db"
         self.db.parent.mkdir(parents=True)
         c = sqlite3.connect(self.db)
@@ -142,7 +116,11 @@ class PublicationTests(unittest.TestCase):
         c.close()
         self.batch = self.folder / "Engine Library/publication"
         pub.prepare(self.db, [{"track_id": 1, "cache_path": self.entry["cache_path"]}], self.batch)
-        self.ps = patch.object(pub.subprocess, "check_output", return_value="/sbin/launchd\n")
+        self.process_output = (
+            '"system.exe","4","Services","0","100 K"\n'
+            if platform.system() == "Windows" else "/sbin/launchd\n"
+        )
+        self.ps = patch.object(pub.subprocess, "check_output", return_value=self.process_output)
         self.ps.start()
         self.addCleanup(self.ps.stop)
 
@@ -169,7 +147,9 @@ class PublicationTests(unittest.TestCase):
             patch.object(
                 pub.subprocess,
                 "check_output",
-                return_value="/Applications/Engine DJ.app/Contents/MacOS/Engine DJ\n",
+                return_value=('"Engine DJ.exe","123","Console","1","100 K"\n'
+                              if platform.system() == "Windows"
+                              else "/Applications/Engine DJ.app/Contents/MacOS/Engine DJ\n"),
             ),
             self.assertRaisesRegex(ValueError, "Quit Engine"),
         ):
@@ -372,7 +352,7 @@ class PublicationTests(unittest.TestCase):
             patch.object(
                 pub.subprocess,
                 "check_output",
-                side_effect=["/sbin/launchd\n", OSError("ps failed")],
+                side_effect=[self.process_output, OSError("ps failed")],
             ),
             self.assertRaisesRegex(RuntimeError, "process visibility"),
         ):
@@ -481,11 +461,11 @@ class PublicationTests(unittest.TestCase):
     def test_publication_apply_restore_reject_unsupported_platform_before_lock(self):
         with (
             patch.object(pub, "writable_platform", self.real_platform_guard),
-            patch.object(platform, "system", return_value="Windows"),
+            patch.object(platform, "system", return_value="UnsupportedOS"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "macOS and Linux"):
+            with self.assertRaisesRegex(RuntimeError, "macOS, Linux and Windows"):
                 pub.apply(self.batch)
-            with self.assertRaisesRegex(RuntimeError, "macOS and Linux"):
+            with self.assertRaisesRegex(RuntimeError, "macOS, Linux and Windows"):
                 pub.restore(self.batch)
         self.assert_database_unchanged()
 
@@ -574,10 +554,10 @@ if __name__ == "__main__":
 
 class PlatformTests(unittest.TestCase):
     def test_unsupported_apply_and_restore_fail_before_filesystem_or_posix_import(self):
-        with patch.object(platform, "system", return_value="Windows"):
+        with patch.object(platform, "system", return_value="UnsupportedOS"):
             for method in (pub.apply, pub.restore):
                 with (
                     self.subTest(method=method.__name__),
-                    self.assertRaisesRegex(RuntimeError, "macOS and Linux"),
+                    self.assertRaisesRegex(RuntimeError, "macOS, Linux and Windows"),
                 ):
                     method(Path("does-not-exist"))

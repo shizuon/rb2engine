@@ -13,6 +13,12 @@ LIBRARIES = ("libavformat", "libavcodec", "libavutil")
 
 
 def build():
+    from .runtime import binary, libraries
+
+    bundled = binary("aac-reader")
+    if bundled is not None:
+        return bundled, {"sha256": digest(bundled), "libraries": libraries(),
+                         "platform": platform.system(), "architecture": platform.machine()}
     from ._build import supported_platform
 
     supported_platform()

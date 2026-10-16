@@ -163,6 +163,8 @@ def build_library(
     database_uuid: str | None = None,
     with_artwork: bool = True,
     on_progress: ProgressCallback | None = None,
+    backup_existing: bool = False,
+    allow_existing: bool = True,
 ) -> Path:
     """Orchestrate a full m.db write and return the final m.db path.
 
@@ -176,6 +178,10 @@ def build_library(
     engine_lib = Path(drive_root) / ENGINE_LIBRARY_DIRNAME
     library_existed = engine_lib.is_dir()
     with library_lock(engine_lib / DATABASE2_DIRNAME):
+        if not allow_existing and (engine_lib / DATABASE2_DIRNAME / M_DB_NAME).exists():
+            raise FatalError("An Engine database appeared after inspection. Inspect again.")
+        if backup_existing:
+            _backup_database(engine_lib / DATABASE2_DIRNAME)
         return _build_library_locked(
             lib,
             drive_root=drive_root,
@@ -187,6 +193,39 @@ def build_library(
             on_progress=on_progress,
             library_existed=library_existed,
         )
+
+
+def _backup_database(db2: Path) -> Path | None:
+    """Snapshot the current database under the writer lock before desktop rebuilds.
+
+    SQLite backup includes committed WAL pages. This is an m.db recovery copy,
+    not a backup of the user's audio or the entire Engine library.
+    """
+    import uuid
+
+    source = db2 / M_DB_NAME
+    if not source.exists():
+        return None
+    folder = db2 / "rb2engine-backups"
+    if source.is_symlink() or folder.is_symlink():
+        raise FatalError("Database backup paths may not be symlinks")
+    folder.mkdir(exist_ok=True)
+    target = folder / f"m-{uuid.uuid4().hex}.db"
+    source_uri = source.resolve().as_uri() + "?mode=ro"
+    try:
+        with (
+            contextlib.closing(sqlite3.connect(source_uri, uri=True)) as src,
+            contextlib.closing(sqlite3.connect(str(target))) as dst,
+        ):
+            src.backup(dst)
+            if dst.execute("PRAGMA quick_check").fetchone() != ("ok",):
+                raise FatalError("Database backup failed its integrity check")
+        # Windows FlushFileBuffers requires a writable handle.
+        with target.open("r+b") as stream:
+            os.fsync(stream.fileno())
+    except (OSError, sqlite3.Error) as exc:
+        raise FatalError(f"Could not back up the existing Engine database: {exc}") from exc
+    return target
 
 
 def _build_library_locked(
@@ -393,6 +432,8 @@ def _build_library_locked(
         # cli.py) adds the clock outside that boundary. The hash lives in the
         # report/journal, never inside m.db: it cannot hash itself.
         if lib.fingerprint is not None:
+            from rb2engine.keyscan import digest_record
+
             report.provenance = ProvenanceRecord(
                 pdb_sha256=lib.fingerprint.sha256,
                 pdb_size=lib.fingerprint.size,
@@ -400,6 +441,9 @@ def _build_library_locked(
                 m_db_sha256=_sha256_file(stage_path),
                 max_playlist_id=max_playlist_id,
                 max_playlist_entity_id=max_entity_id,
+                key_analysis_sha256=(
+                    digest_record(report.key_analysis) if report.key_analysis is not None else None
+                ),
             )
 
         # journal_mode=DELETE removes m.db.tmp-journal on clean close; assert.
@@ -431,7 +475,7 @@ def _build_library_locked(
         # where that class of corruption is still catchable. Running it before
         # os.replace means a failure leaves the user's previous m.db in place.
         if intended_playlists or lib.playlists:
-            check_conn = sqlite3.connect(f"file:{tmp_path}?mode=ro", uri=True)
+            check_conn = sqlite3.connect(tmp_path.resolve().as_uri() + "?mode=ro", uri=True)
             try:
                 if intended_playlists:
                     playlists_mod.assert_entities_match_intent(check_conn, intended_playlists)
@@ -537,7 +581,7 @@ def _read_prior_identity(
 
     uuid_val: str | None = None
     try:
-        conn = sqlite3.connect(f"file:{Path(m_db_path).resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(Path(m_db_path).resolve().as_uri() + "?mode=ro", uri=True)
         try:
             row = conn.execute(
                 "SELECT schemaVersionMajor, schemaVersionMinor, "

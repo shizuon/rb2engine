@@ -1,0 +1,151 @@
+name: Desktop builds
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.label }} desktop
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            label: windows-x64
+          - os: macos-15
+            label: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install desktop build dependencies
+        run: uv sync --extra desktop --dev
+      - run: uv pip install "pyinstaller==6.22.3"
+      - name: Install Windows native compiler
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: make diffutils nasm mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+      - name: Cache LGPL audio runtime
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/native-runtime
+            build/ffmpeg-8.0.3.tar.xz
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packaging/build_native.sh', 'src/rb2engine/overviews/*.c') }}
+      - name: Build Windows LGPL audio runtime
+        if: runner.os == 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash packaging/build_native.sh
+      - name: Build macOS LGPL audio runtime
+        if: runner.os == 'macOS' && steps.native-cache.outputs.cache-hit != 'true'
+        run: bash packaging/build_native.sh
+      - name: Test conversion and path handling on this platform
+        run: uv run pytest -q tests/unit/test_desktop.py tests/unit/test_keyscan.py tests/unit/test_paths_unicode.py tests/unit/test_library_lock.py
+      - name: Test bundled audio and native waveform reference
+        shell: bash
+        run: |
+          export RB2ENGINE_NATIVE_RUNTIME="$GITHUB_WORKSPACE/build/native-runtime"
+          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
+      - name: Build standalone application
+        run: uv run pyinstaller --noconfirm packaging/desktop.spec
+      - name: Create authored test export with a Unicode and URI-sensitive root
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+          from tests.desktop_fixture import make_drive
+          make_drive(Path(os.environ['RUNNER_TEMP']) / '演出 USB #1 100%', tone=True)
+          PY
+      - name: Include signed Microsoft WebView2 bootstrapper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = 'dist/rb2engine/MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup
+          $signature = Get-AuthenticodeSignature $setup
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw 'WebView2 bootstrapper signature is not a valid Microsoft signature'
+          }
+          Copy-Item packaging/WINDOWS-README.txt dist/rb2engine/README.txt
+      - name: Windows packaged UI and full conversion smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Launch the actual windowed exe, not the Python source or a mocked bridge.
+          $out = "$env:RUNNER_TEMP/desktop-smoke.json"
+          $drive = "$env:RUNNER_TEMP/演出 USB #1 100%"
+          $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"", '--smoke-waveforms') -PassThru
+          if (-not $process.WaitForExit(240000)) { $process.Kill(); throw 'Packaged UI timed out' }
+          if (!(Test-Path $out)) { throw 'Packaged app did not produce smoke evidence' }
+          Get-Content $out
+          $result = Get-Content $out -Raw | ConvertFrom-Json
+          if (!$result.ok -or $process.ExitCode -ne 0) { throw 'Packaged UI failed' }
+          if ($result.renderer -notmatch 'Edg/') { throw 'Expected the Edge WebView2 renderer' }
+      - name: macOS packaged UI and full conversion smoke
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          dist/rb2engine.app/Contents/MacOS/rb2engine --smoke-test "$RUNNER_TEMP/desktop-smoke.json" --smoke-drive "$RUNNER_TEMP/演出 USB #1 100%" --smoke-waveforms
+          cat "$RUNNER_TEMP/desktop-smoke.json"
+      - name: Windows packaged UI with official OpenKeyScan analyzer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Read the official package manifest; extract into runner temp only.
+          $base = 'https://update.rekord.cloud/releases/openkeyscan/latest/'
+          $manifestPath = "$env:RUNNER_TEMP/openkeyscan.appinstaller"
+          Invoke-WebRequest ($base + 'openkeyscan.appinstaller') -OutFile $manifestPath
+          [xml]$manifest = Get-Content $manifestPath -Raw -Encoding UTF8
+          $uri = [uri]$manifest.AppInstaller.MainPackage.Uri
+          if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'update.rekord.cloud') { throw 'Unexpected package host' }
+          $package = "$env:RUNNER_TEMP/openkeyscan.msix"
+          Invoke-WebRequest $uri.AbsoluteUri -OutFile $package
+          $app = "$env:RUNNER_TEMP/OpenKeyScan"
+          $makeappx = Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/bin/*/x64/makeappx.exe' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$makeappx) { throw 'Windows SDK MakeAppx was not found' }
+          & $makeappx.FullName unpack /o /p $package /d $app
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract OpenKeyScan MSIX' }
+          $analyzer = Get-ChildItem $app -Recurse -Filter 'openkeyscan-analyzer.exe' | Select-Object -First 1
+          if (!$analyzer) { throw 'OpenKeyScan analyzer missing' }
+          $out = "$env:RUNNER_TEMP/keyscan-smoke.json"
+          $drive = "$env:RUNNER_TEMP/演出 USB #1 100%"
+          $before = (Get-FileHash "$drive/Contents/test.wav" -Algorithm SHA256).Hash
+          $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"", '--smoke-analyzer', "`"$app`"") -PassThru
+          if (-not $process.WaitForExit(240000)) { $process.Kill(); throw 'OpenKeyScan UI smoke timed out' }
+          if (!(Test-Path $out)) { throw 'OpenKeyScan smoke evidence missing' }
+          Get-Content $out
+          $result = Get-Content $out -Raw | ConvertFrom-Json
+          if (!$result.ok -or $process.ExitCode -ne 0) { throw 'OpenKeyScan smoke failed' }
+          if ((Get-FileHash "$drive/Contents/test.wav" -Algorithm SHA256).Hash -ne $before) { throw 'Audio changed' }
+      - name: Collect licenses and archive
+        shell: bash
+        run: |
+          uv run python packaging/archive_desktop.py '${{ matrix.label }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rb2engine-${{ matrix.label }}
+          path: desktop-dist/*
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/desktop-smoke.json
+            ${{ runner.temp }}/keyscan-smoke.json
+            build/desktop/warn-desktop.txt

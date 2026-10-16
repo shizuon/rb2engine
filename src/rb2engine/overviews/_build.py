@@ -15,11 +15,8 @@ from typing import Any
 
 def supported_platform() -> str:
     system = platform.system()
-    if system not in ("Darwin", "Linux"):
-        raise RuntimeError(
-            "Overview generation currently supports macOS and Linux builds only; "
-            "Windows waveform generation is not supported. Base conversion remains available."
-        )
+    if system not in ("Darwin", "Linux", "Windows"):
+        raise RuntimeError("Overview generation supports macOS, Linux and Windows only")
     return system
 
 
@@ -31,6 +28,8 @@ def build_cache() -> Path:
         return Path(override).expanduser().resolve()
     if system == "Darwin":
         root = Path.home() / "Library" / "Caches"
+    elif system == "Windows":
+        root = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
     else:
         root = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))
     return root / "rb2engine" / "overviews" / "build"
@@ -46,6 +45,11 @@ def sha(path: Path) -> str:
 
 def compiler_configuration() -> tuple[str, list[str], dict[str, Any]]:
     system = supported_platform()
+    if system == "Windows":
+        raise RuntimeError(
+            "Use the desktop waveform runtime on Windows; "
+            "build it with packaging/build_native.sh"
+        )
     if system == "Darwin":
         compiler = subprocess.check_output(
             ["xcrun", "--find", "clang"],  # noqa: S607 - Xcode toolchain lookup
@@ -108,7 +112,7 @@ def cached_build(
     manifest = destination / "build.json"
     if destination.exists():
         try:
-            recorded = json.loads(manifest.read_text())
+            recorded = json.loads(manifest.read_text(encoding="utf-8"))
             if recorded["identity"] != identity or sha(artifact) != recorded["binary_sha256"]:
                 raise ValueError("native artifact identity mismatch")
         except (OSError, ValueError, KeyError) as exc:
@@ -129,14 +133,14 @@ def cached_build(
         if result.returncode:
             raise RuntimeError("Overview native compilation failed: " + result.stderr[-4000:])
         recorded = {"identity": identity, "binary_sha256": sha(binary)}
-        (stage / "build.json").write_text(json.dumps(recorded, indent=2))
+        (stage / "build.json").write_text(json.dumps(recorded, indent=2), encoding="utf-8")
         try:
             stage.rename(destination)
         except OSError:
             if not destination.is_dir():
                 raise
             # Another builder won. Validate its result rather than overwriting it.
-            other = json.loads(manifest.read_text())
+            other = json.loads(manifest.read_text(encoding="utf-8"))
             if other["identity"] != identity or sha(artifact) != other["binary_sha256"]:
                 raise RuntimeError(
                     "Concurrent overview build produced an invalid artifact"

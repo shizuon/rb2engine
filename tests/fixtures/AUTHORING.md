@@ -423,3 +423,16 @@ Until then, the structural + rekordbox re-open + art hash checks are the gate.
 | `t05_overflow` | 4 hot + 8 memory = 12 → pad overflow; **no art** |
 | `t06_loops` | 3 saved loops + 1 hot-cue-that-is-a-loop (U3 pad free) |
 | `t07_loop_overflow` | 4 hot-cue loops + 6 saved loops = 10 → loop-slot overflow |
+
+## Bundled audio runtime fixture
+
+`audio/authored-440hz.mp3` is an original synthetic 440 Hz sine wave, three seconds,
+44.1 kHz stereo, encoded at 96 kbit/s using FFmpeg's libmp3lame encoder. No recorded
+music is included. It is MIT-licensed with this repository. Reproduce with:
+
+```sh
+ffmpeg -v error -f lavfi -i sine=frequency=440:sample_rate=44100:duration=3 -ac 2 -c:a libmp3lame -b:a 96k -map_metadata -1 authored-440hz.mp3
+```
+
+The decoder tests assert the known frequency, three-second clock and unchanged
+source bytes; they do not use this encoded fixture as an Engine-native reference.

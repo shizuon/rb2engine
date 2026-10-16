@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'; img-src data:; connect-src 'none'">
+<title>rb2engine</title>
+<style>/* APP_CSS */</style>
+</head>
+<body>
+<main>
+<header><h1>rb<span>2</span>engine</h1><button id="language" class="text-button" aria-label="Switch language">EN</button></header>
+<label for="path" class="field-label" data-i="drive">U 盘</label>
+<div class="path-row"><input id="path" list="volumes" type="text" spellcheck="false" autocomplete="off" placeholder="选择 U 盘…"><datalist id="volumes"></datalist><button id="browse" class="secondary" data-i="browse">选择…</button><button id="inspect" class="icon-button" aria-label="读取曲库" title="读取曲库">↻</button></div>
+<div id="summary" class="summary" aria-live="polite"><span id="counts"></span><span id="missing"></span></div>
+<div class="keyscan-option"><label class="artwork"><input type="checkbox" id="fill-keys"><span data-i="fillKeys">缺失调性时用 OpenKeyScan 补全</span></label><div id="keyscan-help" hidden><span data-i="keyscanMissing">未找到 OpenKeyScan。</span> <button id="keyscan-download" class="text-button" data-i="download">下载</button><button id="keyscan-choose" class="text-button" data-i="chooseProgram">选择已安装程序…</button></div></div>
+<label class="artwork waveform-option"><input type="checkbox" id="fill-waveforms"><span data-i="fillWaveforms">补全 Engine 概览波形</span></label>
+<div class="actions"><label class="artwork"><input type="checkbox" id="artwork" checked><span data-i="artwork">包含封面</span></label><button id="waveforms" class="text-button" hidden data-i="waveforms">补全波形</button><button id="convert" class="primary" disabled data-i="convert">转换</button></div>
+<section id="status-box" aria-live="polite" hidden><div class="status-line"><span id="status-title"></span><span id="progress-count"></span><button id="verify" class="text-button" hidden data-i="verify">校验</button></div><div id="progress" class="progress" role="progressbar" aria-label="Current phase"><i></i></div><p id="status-message" hidden></p></section>
+<details id="details" hidden><summary data-i="report">报告</summary><pre id="report-content"></pre></details>
+<dialog id="confirm-dialog"><h2 data-i="confirmTitle">开始转换？</h2><p data-i="closeApps">请先退出 rekordbox 和 Engine DJ。</p><p id="replace-note" hidden data-i="replaceNote">现有 Engine 数据库将备份并重建。</p><div class="dialog-actions"><button id="cancel-convert" class="secondary" data-i="cancel">取消</button><button id="confirm-convert" class="primary" data-i="confirm">已退出，转换</button></div></dialog>
+</main>
+<script>/* APP_JS */</script>
+</body>
+</html>

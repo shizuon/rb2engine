@@ -4,11 +4,13 @@
 [![Release](https://img.shields.io/github/v/release/shizuon/rb2engine)](https://github.com/shizuon/rb2engine/releases)
 
 This fork builds on [J.R. Gutierrez's rb2engine](https://github.com/jrgutier/rb2engine).
-Version 0.6.1 retains the verified overview generation and conversion fixes from
-[the previous fork](https://github.com/Last-Xuan-ai/rb2engine), and adds conservative
-unindexed VBR duration recovery and portable Unicode/SFM path handling.
-Special-name aliases are used only when they resolve to the same file; this does
-not rename audio or certify Windows application or physical-player compatibility.
+Version 0.7.0 adds a Chinese/English desktop app, optional missing-key analysis
+through OpenKeyScan, and bundled Windows/macOS overview waveform completion.
+It retains the conversion and native overview work from
+[the previous fork](https://github.com/Last-Xuan-ai/rb2engine).
+Download the Windows x64 or macOS Apple Silicon ZIP from
+[the v0.7.0 release](https://github.com/shizuon/rb2engine/releases/tag/v0.7.0);
+Python and the waveform runtime are included. See [Desktop app](docs/desktop.md).
 The upstream PyPI package remains separately maintained; install this fork from its
 [GitHub releases](https://github.com/shizuon/rb2engine/releases) or source.
 
@@ -20,6 +22,20 @@ has desktop validation; hardware playback of this fork still needs validation.
 
 ```bash
 rb2engine convert /Volumes/MY_USB
+```
+
+## Desktop app
+
+A small Chinese/English window: choose a USB, read its library, convert, verify.
+Windows x64 and macOS Apple Silicon builds are produced by
+[Desktop builds](https://github.com/shizuon/rb2engine/actions/workflows/desktop.yml).
+See [desktop setup and compatibility](docs/desktop.md) for downloads, WebView2,
+startup logs and database recovery copies. CI verifies the frozen app; physical
+USB/player acceptance remains separate.
+
+```bash
+uv sync --extra desktop
+uv run rb2engine-gui
 ```
 
 ## Why this exists
@@ -58,16 +74,18 @@ audio copy. The fork's overview evidence is reported separately below.
 ## Install
 
 ```bash
-python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@v0.6.1"
+python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@v0.7.0"
 ```
 
 Requires Python 3.11+. Base conversion works on macOS, Windows and Linux. The
-optional waveform backend builds on macOS and Linux; Windows waveform generation
-is explicitly unsupported. Native overview comparisons were performed on Apple
-Silicon macOS, not on every supported build platform.
+optional waveform backend compiles locally on macOS and Linux. Desktop packages
+include the waveform runtime on macOS ARM64 and Windows x64, with no compiler or
+FFmpeg installation required. Broad native overview comparisons were performed
+on Apple Silicon macOS; bundled-runtime checks do not establish every-song or
+physical-player parity on every platform.
 
 To install from a release artifact, download the wheel from this fork's Releases
-page and run `python -m pip install /path/to/rb2engine-0.6.1-py3-none-any.whl`.
+page and run `python -m pip install /path/to/rb2engine-0.7.0-py3-none-any.whl`.
 
 From source:
 
@@ -158,7 +176,7 @@ Install the extra plus external tools first; macOS needs Xcode Command Line Tool
 FFmpeg and pkg-config. See [complete setup and commands](docs/waveforms.md).
 
 ```bash
-python -m pip install "rb2engine[waveforms] @ git+https://github.com/shizuon/rb2engine.git@v0.6.1"
+python -m pip install "rb2engine[waveforms] @ git+https://github.com/shizuon/rb2engine.git@v0.7.0"
 brew install ffmpeg pkgconf
 rb2engine waveforms doctor
 
@@ -239,7 +257,9 @@ Still: **it's a DJ library. Back it up before you point a new tool at it.**
 **Overview generation is opt-in.** `convert` keeps its existing role.
 `waveforms prepare` generates the list preview and whole-track overview, preserving
 BPM, key, cue, loop and grid data. It does not generate the scrolling high-resolution
-waveform or analyze BPM/key/grid. Engine provides its own analysis for those.
+waveform or analyze BPM/grid. The desktop app can optionally fill missing keys
+using a separately installed [OpenKeyScan](https://www.openkeyscan.com/download).
+Existing keys are preserved. Engine provides its own analysis for other data.
 
 ## Supported versions
 

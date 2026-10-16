@@ -13,6 +13,9 @@ jobs:
   test:
     uses: ./.github/workflows/ci.yml
 
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -48,18 +51,27 @@ jobs:
           path: dist/
 
   github-release:
-    needs: build
+    needs: [build, desktop]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: release-assets/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rb2engine-*
+          merge-multiple: true
+          path: release-assets/
+      - name: Verify complete release and write checksums
+        run: python packaging/prepare_release.py release-assets
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: release-assets/*
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body_path: docs/releases/${{ github.ref_name }}.md
+          name: rb2engine ${{ github.ref_name }}

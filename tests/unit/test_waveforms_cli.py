@@ -165,7 +165,7 @@ def test_generate_default_cache_is_sibling_of_native_build_cache(
     generator.generate.assert_called_once_with(audio, build.parent / "waveforms")
 
 
-def test_windows_generation_is_rejected_with_real_backend(runner, monkeypatch, tmp_path):
+def test_windows_source_requires_bundled_runtime(runner, monkeypatch, tmp_path):
     pytest.importorskip("numpy")
     monkeypatch.setattr(platform, "system", lambda: "Windows")
     audio = tmp_path / "song.wav"
@@ -173,7 +173,7 @@ def test_windows_generation_is_rejected_with_real_backend(runner, monkeypatch, t
     cache = tmp_path / "cache"
     result = runner.invoke(waveforms, ["generate", str(audio), "--cache", str(cache)])
     assert result.exit_code != 0
-    assert "Windows waveform generation is not supported" in result.output
+    assert "Use the desktop waveform runtime on Windows" in result.output
     assert not cache.exists()
 
 

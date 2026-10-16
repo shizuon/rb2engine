@@ -12,6 +12,7 @@ from . import __version__
 from .decoder import decode, executable, probe
 from .dsp import build, features, reduce_points
 from .formats import digest, pack, unpack
+from .runtime import libraries, subprocess_options
 
 HERE = Path(__file__).resolve().parent
 
@@ -33,7 +34,7 @@ def cache_key(audio_sha, runtime, implementation):
 
 def verify_entry(folder, expected_key=None):
     folder = Path(folder)
-    report = json.loads((folder / "result.json").read_text())
+    report = json.loads((folder / "result.json").read_text(encoding="utf-8"))
     if (
         report.get("schema") != 2
         or report["declared_frames"] <= 0
@@ -121,10 +122,15 @@ def create_context(library=None):
         executable_paths[name] = str(path)
         runtime[name] = {
             "sha256": digest(path),
-            "version": subprocess.check_output([str(path), "-version"], text=True).splitlines()[0],  # noqa: S603
+            "version": subprocess.check_output(  # noqa: S603 - resolved native tool
+                [str(path), "-version"], text=True, **subprocess_options()
+            ).splitlines()[0],
         }
     runtime["dsp_sha256"] = digest(compiled)
     context = RuntimeContext(compiled, runtime, implementation_digest(), executable_paths)
+    runtime["bundled_libraries"] = libraries()
+    for dependency in runtime["bundled_libraries"].values():
+        context.remember(dependency["path"])
     for path in [compiled, *binaries]:
         context.remember(path)
     return context
@@ -208,7 +214,9 @@ def generate(audio, cache_root, library=None, *, context=None):
         }
         del decoded
         (staging / "decoded.f32").unlink()
-        (staging / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+        (staging / "result.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         verify_entry(staging, identity)
         try:
             staging.rename(target)

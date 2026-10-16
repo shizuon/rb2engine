@@ -312,7 +312,7 @@ def _read_information(
         return None
     try:
         # URI mode=ro: no journal, no side files, no writes.
-        conn = sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     except sqlite3.Error:
         return None
     try:
