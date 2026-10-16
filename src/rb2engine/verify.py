@@ -265,7 +265,7 @@ def verify_library(
     with m_db_path.open("rb") as fh:
         m_db_sha256 = hashlib.file_digest(fh, "sha256").hexdigest()
 
-    conn = sqlite3.connect(f"file:{m_db_path.resolve()}?mode=ro", uri=True)
+    conn = sqlite3.connect(m_db_path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
         result = _verify_against_open_db(
             source,

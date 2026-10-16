@@ -22,6 +22,20 @@ has desktop validation; hardware playback of this fork still needs validation.
 rb2engine convert /Volumes/MY_USB
 ```
 
+## Desktop app
+
+A small Chinese/English window: choose a USB, read its library, convert, verify.
+Windows x64 and macOS Apple Silicon builds are produced by
+[Desktop builds](https://github.com/shizuon/rb2engine/actions/workflows/desktop.yml).
+See [desktop setup and compatibility](docs/desktop.md) for downloads, WebView2,
+startup logs and database recovery copies. CI verifies the frozen app; physical
+USB/player acceptance remains separate.
+
+```bash
+uv sync --extra desktop
+uv run rb2engine-gui
+```
+
 ## Why this exists
 
 Engine DJ can already import a rekordbox stick — but its export **copies your audio** into `Engine Library/Music/`. On a full stick that means a second copy of your whole library. A 44 GB library needs 44 GB free, and usually there isn't.

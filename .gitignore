@@ -52,3 +52,6 @@ tests/fixtures/real/
 rb2engine-report.json
 *.tmp
 dist/
+
+# Desktop release staging
+desktop-dist/

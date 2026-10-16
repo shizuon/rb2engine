@@ -1,0 +1,94 @@
+name: Desktop builds
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.label }} desktop
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            label: windows-x64
+          - os: macos-15
+            label: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install desktop build dependencies
+        run: uv sync --extra desktop --dev
+      - run: uv pip install "pyinstaller==6.22.3"
+      - name: Test conversion and path handling on this platform
+        run: uv run pytest -q tests/unit/test_desktop.py tests/unit/test_paths_unicode.py tests/unit/test_library_lock.py
+      - name: Build standalone application
+        run: uv run pyinstaller --noconfirm packaging/desktop.spec
+      - name: Create authored test export with a Unicode and URI-sensitive root
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+          from tests.desktop_fixture import make_drive
+          make_drive(Path(os.environ['RUNNER_TEMP']) / '演出 USB #1 100%')
+          PY
+      - name: Include signed Microsoft WebView2 bootstrapper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = 'dist/rb2engine/MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup
+          $signature = Get-AuthenticodeSignature $setup
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw 'WebView2 bootstrapper signature is not a valid Microsoft signature'
+          }
+          Copy-Item packaging/WINDOWS-README.txt dist/rb2engine/README.txt
+      - name: Windows packaged UI and full conversion smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Launch the actual windowed exe, not the Python source or a mocked bridge.
+          $out = "$env:RUNNER_TEMP/desktop-smoke.json"
+          $drive = "$env:RUNNER_TEMP/演出 USB #1 100%"
+          $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"") -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Packaged UI timed out' }
+          if (!(Test-Path $out)) { throw 'Packaged app did not produce smoke evidence' }
+          Get-Content $out
+          $result = Get-Content $out -Raw | ConvertFrom-Json
+          if (!$result.ok -or $process.ExitCode -ne 0) { throw 'Packaged UI failed' }
+          if ($result.renderer -notmatch 'Edg/') { throw 'Expected the Edge WebView2 renderer' }
+      - name: macOS packaged UI and full conversion smoke
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          dist/rb2engine.app/Contents/MacOS/rb2engine --smoke-test "$RUNNER_TEMP/desktop-smoke.json" --smoke-drive "$RUNNER_TEMP/演出 USB #1 100%"
+          cat "$RUNNER_TEMP/desktop-smoke.json"
+      - name: Collect licenses and archive
+        shell: bash
+        run: |
+          uv run python packaging/archive_desktop.py '${{ matrix.label }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rb2engine-${{ matrix.label }}
+          path: desktop-dist/*
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/desktop-smoke.json
+            build/desktop/warn-desktop.txt
