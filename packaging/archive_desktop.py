@@ -20,6 +20,21 @@ licenses = bundle / ('Contents/Resources/licenses' if sys.platform == 'darwin' e
 licenses.mkdir(parents=True, exist_ok=True)
 for source in ('LICENSE', 'NOTICE'):
     shutil.copy2(root / source, licenses / source)
+ffmpeg_license = licenses / 'FFmpeg'
+ffmpeg_license.mkdir(exist_ok=True)
+for source in ('COPYING.LGPLv2.1', 'LICENSE.md', 'config.h', 'config.mak'):
+    shutil.copy2(root / 'build/native-runtime' / source, ffmpeg_license / source)
+# Supply complete corresponding LGPL source and exact configuration/build script.
+# Libraries remain dynamically linked and replaceable in native_runtime.
+shutil.copy2(root / 'build/ffmpeg-8.0.3.tar.xz', ffmpeg_license)
+shutil.copy2(root / 'packaging/build_native.sh', ffmpeg_license)
+for source in ('dsp.c', 'aac_decode.c'):
+    shutil.copy2(root / 'src/rb2engine/overviews' / source, ffmpeg_license)
+if sys.platform == 'win32':
+    for package in ('gcc-libs', 'winpthreads'):
+        source = Path('C:/msys64/ucrt64/share/licenses') / package
+        if source.is_dir():
+            shutil.copytree(source, licenses / package, dirs_exist_ok=True)
 # Retain the license texts installed with bundled Python dependencies. Including
 # a few build-only distributions is harmless and avoids losing transitive notices.
 for distribution in importlib.metadata.distributions():

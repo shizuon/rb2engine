@@ -53,8 +53,8 @@ def positive_integer(value, field):
 
 
 def writable_platform():
-    if platform.system() not in ("Darwin", "Linux"):
-        raise RuntimeError("Overview apply/restore currently support macOS and Linux only")
+    if platform.system() not in ("Darwin", "Linux", "Windows"):
+        raise RuntimeError("Overview apply/restore support macOS, Linux and Windows only")
 
 
 def plan_folder(path, database):
@@ -99,7 +99,7 @@ def save(path, data):
 
 def sync_dir(path):
     if platform.system() == "Windows":
-        return  # Read-only planning needs no POSIX directory handle.
+        return  # Windows has no POSIX directory fsync; file handles are flushed above.
     fd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(fd)
@@ -230,7 +230,7 @@ def validate_waveform(blob, kind, frames):
         raise ValueError("Waveform footer disagrees with channel data")
 
 
-def prepare(database, entries, destination):
+def prepare(database, entries, destination, *, expected_fingerprint=None, empty_only=False):
     database = database_path(database)
     destination = plan_folder(destination, database)
     if destination.exists():
@@ -245,6 +245,8 @@ def prepare(database, entries, destination):
         c.execute("BEGIN")
         uid = schema(c)
         full = fingerprint(c)
+        if expected_fingerprint is not None and full != expected_fingerprint:
+            raise ValueError("Engine database changed during waveform generation; retry")
         protected = fingerprint(c, True, ids)
         items = []
         for entry, tid in zip(entries, ids, strict=True):
@@ -264,6 +266,8 @@ def prepare(database, entries, destination):
                 validate_waveform(blob, kind, report["declared_frames"])
             target = rgb_path(database, uid, tid)
             old_rgb = target.read_bytes() if target.exists() else None
+            if empty_only and (perf["overviewWaveFormData"] or old_rgb is not None):
+                raise ValueError(f"Track {tid} acquired a waveform during generation; retry")
             items.append(
                 {
                     "track_id": tid,
@@ -324,18 +328,37 @@ def prepare(database, entries, destination):
 
 def process_commands():
     try:
+        if platform.system() == "Windows":
+            import csv
+
+            from .runtime import subprocess_options
+
+            tasklist = Path(os.environ["SYSTEMROOT"]) / "System32" / "tasklist.exe"
+            result = subprocess.check_output(  # noqa: S603 - Windows system tool
+                [str(tasklist), "/FO", "CSV", "/NH"], stderr=subprocess.PIPE,
+                text=True, **subprocess_options(),
+            )
+            rows = list(csv.reader(result.splitlines()))
+            if not rows or any(len(row) < 2 for row in rows):
+                raise OSError("Cannot parse process list")
+            return "\n".join(row[0] for row in rows)
         return subprocess.check_output(
             ["/bin/ps", "-axo", "comm="], text=True, stderr=subprocess.PIPE
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, KeyError, subprocess.CalledProcessError) as exc:
         raise RuntimeError(
             "Cannot check running Engine process; publication requires process visibility"
         ) from exc
 
 
+def is_engine_process(command):
+    name = command.strip().replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    return name.removesuffix(".exe") in ("engine dj", "engine prime", "engineprime")
+
+
 def quiescent(database):
     for line in process_commands().splitlines():
-        if Path(line.strip()).name in ("Engine DJ", "Engine Prime", "EnginePrime"):
+        if is_engine_process(line):
             raise ValueError("Quit Engine DJ before applying or restoring waveforms")
     for suffix in ("-wal", "-journal"):
         file = Path(str(database) + suffix)
@@ -497,7 +520,7 @@ def apply(folder):
                 backup.row_factory = sqlite3.Row
                 if fingerprint(backup) != plan["database_fingerprint"]:
                     raise ValueError("Backup does not match prepared database state")
-            with backup_file.open("rb") as backup_handle:
+            with backup_file.open("r+b") as backup_handle:
                 os.fsync(backup_handle.fileno())
             sync_dir(folder)
             rgb_backups = {}
@@ -546,7 +569,7 @@ def apply(folder):
 def quiescent_process_only():
     # While our transaction is open its own rollback journal is expected.
     if any(
-        Path(x.strip()).name in ("Engine DJ", "Engine Prime", "EnginePrime")
+        is_engine_process(x)
         for x in process_commands().splitlines()
     ):
         raise ValueError("Engine opened during publication; rollback required")

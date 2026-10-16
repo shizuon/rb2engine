@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import platform
 import shutil
 import subprocess
@@ -27,12 +28,13 @@ def test_namespace_import_does_not_load_optional_dependencies() -> None:
     subprocess.run([sys.executable, "-S", "-c", code, str(source)], check=True)  # noqa: S603
 
 
-def test_windows_rejected_before_cache_or_compiler_access(monkeypatch, tmp_path) -> None:
+def test_windows_cache_and_compiler_guidance(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(_build.platform, "system", lambda: "Windows")
-    monkeypatch.setenv("RB2ENGINE_OVERVIEWS_BUILD_CACHE", str(tmp_path / "never-created"))
-    with pytest.raises(RuntimeError, match="Windows waveform generation is not supported"):
-        _build.build_cache()
-    assert not (tmp_path / "never-created").exists()
+    monkeypatch.delenv("RB2ENGINE_OVERVIEWS_BUILD_CACHE", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert _build.build_cache() == tmp_path / "rb2engine/overviews/build"
+    with pytest.raises(RuntimeError, match="desktop waveform runtime"):
+        _build.compiler_configuration()
 
 
 def test_build_cache_is_user_owned(monkeypatch, tmp_path) -> None:
@@ -180,7 +182,8 @@ def test_cache_identity_covers_audio_runtime_and_code(generator) -> None:
 
 
 @pytest.mark.skipif(
-    platform.system() != "Darwin" or platform.machine() != "arm64",
+    not os.environ.get("RB2ENGINE_NATIVE_RUNTIME")
+    and (platform.system() != "Darwin" or platform.machine() != "arm64"),
     reason="Engine native byte-exact reference is validated on Apple Silicon macOS",
 )
 def test_original_frequency_sweep_matches_engine_native_reference(
@@ -197,7 +200,9 @@ def test_original_frequency_sweep_matches_engine_native_reference(
 
     from rb2engine.overviews.formats import unpack
 
-    if not all(shutil.which(tool) for tool in ("ffmpeg", "ffprobe", "xcrun")):
+    if not os.environ.get("RB2ENGINE_NATIVE_RUNTIME") and not all(
+        shutil.which(tool) for tool in ("ffmpeg", "ffprobe", "xcrun")
+    ):
         pytest.skip("native integration requires FFmpeg and Xcode command-line tools")
     monkeypatch.setenv("RB2ENGINE_OVERVIEWS_BUILD_CACHE", str(tmp_path / "native-build"))
     rate = 44100

@@ -15,11 +15,8 @@ from typing import Any
 
 def supported_platform() -> str:
     system = platform.system()
-    if system not in ("Darwin", "Linux"):
-        raise RuntimeError(
-            "Overview generation currently supports macOS and Linux builds only; "
-            "Windows waveform generation is not supported. Base conversion remains available."
-        )
+    if system not in ("Darwin", "Linux", "Windows"):
+        raise RuntimeError("Overview generation supports macOS, Linux and Windows only")
     return system
 
 
@@ -31,6 +28,8 @@ def build_cache() -> Path:
         return Path(override).expanduser().resolve()
     if system == "Darwin":
         root = Path.home() / "Library" / "Caches"
+    elif system == "Windows":
+        root = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
     else:
         root = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))
     return root / "rb2engine" / "overviews" / "build"
@@ -46,6 +45,11 @@ def sha(path: Path) -> str:
 
 def compiler_configuration() -> tuple[str, list[str], dict[str, Any]]:
     system = supported_platform()
+    if system == "Windows":
+        raise RuntimeError(
+            "Use the desktop waveform runtime on Windows; "
+            "build it with packaging/build_native.sh"
+        )
     if system == "Darwin":
         compiler = subprocess.check_output(
             ["xcrun", "--find", "clang"],  # noqa: S607 - Xcode toolchain lookup

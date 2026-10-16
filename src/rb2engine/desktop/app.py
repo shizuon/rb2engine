@@ -22,10 +22,11 @@ def render_html() -> str:
 
 def _smoke(
     window: Any, service: DesktopService, output: Path, drive: str | None, analyze: bool,
+    waveforms: bool = False,
 ) -> None:
     """Packaged-app smoke: real renderer, bridge, DOM buttons and converter."""
     result: dict[str, Any] = {"ok": False}
-    deadline = time.monotonic() + (180 if analyze else 80)
+    deadline = time.monotonic() + (210 if analyze or waveforms else 80)
     try:
         while not window.evaluate_js("Boolean(window.rb2engineReady)"):
             if time.monotonic() > deadline:
@@ -44,7 +45,14 @@ def _smoke(
         result["keyscan"] = {"installed": installed, "download_prompt_shown": not installed}
         if not analyze:
             window.evaluate_js("document.querySelector('#fill-keys').click();")
+        if waveforms:
+            window.evaluate_js("document.querySelector('#fill-waveforms').click();")
         if drive:
+            from rb2engine.overviews.formats import digest
+
+            source_files = [p for folder in (Path(drive) / "PIONEER", Path(drive) / "Contents")
+                            for p in folder.rglob("*") if p.is_file()]
+            source_hashes = {str(p): digest(p) for p in source_files}
             window.evaluate_js(
                 f"document.querySelector('#path').value={json.dumps(drive)};"
                 "document.querySelector('#path').dispatchEvent(new Event('input'));"
@@ -65,6 +73,47 @@ def _smoke(
             if service.get_state()["status"] != "verified":
                 raise RuntimeError(service.get_state()["details"])
             result["conversion"] = service.get_state()["result"]
+            if waveforms:
+                import subprocess
+                import tempfile
+
+                from rb2engine.overviews import publication
+                from rb2engine.overviews.decoder import executable
+                from rb2engine.overviews.generator import generate
+                from rb2engine.overviews.runtime import subprocess_options
+
+                waveform_result = result["conversion"]["waveforms"]
+                if waveform_result["generated"] != 1 or waveform_result["failures"]:
+                    raise RuntimeError(f"Waveform generation failed: {waveform_result}")
+                result["waveforms"] = waveform_result
+                result["waveform_restore"] = publication.restore(waveform_result["batch"])
+                # Exercise the separate button on the existing converted library.
+                window.evaluate_js(
+                    "document.querySelector('#waveforms').click();"
+                    "document.querySelector('#confirm-convert').click();"
+                )
+                _wait_operation(service, "waveforms", deadline)
+                final = service.get_state()
+                if final["status"] != "waveforms_complete":
+                    raise RuntimeError(f"Standalone waveform completion failed: {final}")
+                result["standalone_waveforms"] = final["result"]["waveforms"]
+                # Exercise the AAC helper from the frozen bundle as well as
+                # generic decoding. Its output paths must support Unicode.
+                with tempfile.TemporaryDirectory(prefix="rb2engine-aac-") as scratch:
+                    audio = Path(scratch) / "音频 #1 100%.m4a"
+                    subprocess.run(  # noqa: S603 - bundled executable, authored smoke input
+                        [executable("ffmpeg"), "-v", "error", "-i",
+                         str(Path(drive) / "Contents/test.wav"), "-c:a", "aac", str(audio)],
+                        capture_output=True, check=True, **subprocess_options(),
+                    )
+                    generated = generate(audio, Path(scratch) / "中文缓存")
+                    result["aac_runtime"] = {
+                        key: generated[key] for key in
+                        ("codec", "sample_rate", "declared_frames", "audio_written")
+                    }
+            if source_hashes != {str(p): digest(p) for p in source_files}:
+                raise RuntimeError("Source export or audio changed")
+            result["source_hashes_unchanged"] = True
             if analyze:
                 report_path = Path(result["conversion"]["report"])
                 report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -99,6 +148,7 @@ def main() -> None:
     parser.add_argument("--smoke-test", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--smoke-drive", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-analyzer", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-waveforms", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if sys.platform == "win32":
         log_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "rb2engine"
@@ -119,7 +169,7 @@ def main() -> None:
             service._analyzer_path = str(resolve_analyzer(args.smoke_analyzer))
         window = webview.create_window(
             "rb2engine", html=render_html(), js_api=service,
-            width=660, height=430, min_size=(520, 360), background_color="#f7f8f4",
+            width=660, height=470, min_size=(520, 400), background_color="#f7f8f4",
             text_select=True,
         )
         if window is None:
@@ -131,7 +181,7 @@ def main() -> None:
         if args.smoke_test:
             webview.start(
                 _smoke, (window, service, args.smoke_test, args.smoke_drive,
-                         bool(args.smoke_analyzer)), **options,
+                         bool(args.smoke_analyzer), args.smoke_waveforms), **options,
             )
             if not json.loads(args.smoke_test.read_text(encoding="utf-8"))["ok"]:
                 raise SystemExit(1)

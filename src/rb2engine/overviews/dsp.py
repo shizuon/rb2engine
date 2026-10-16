@@ -9,6 +9,11 @@ HERE = Path(__file__).resolve().parent
 
 
 def build():
+    from .runtime import binary
+
+    bundled = binary("overview-dsp")
+    if bundled is not None:
+        return bundled
     from ._build import cached_build
 
     binary, _ = cached_build(

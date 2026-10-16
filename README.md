@@ -76,9 +76,11 @@ python -m pip install "rb2engine @ git+https://github.com/shizuon/rb2engine.git@
 ```
 
 Requires Python 3.11+. Base conversion works on macOS, Windows and Linux. The
-optional waveform backend builds on macOS and Linux; Windows waveform generation
-is explicitly unsupported. Native overview comparisons were performed on Apple
-Silicon macOS, not on every supported build platform.
+optional waveform backend compiles locally on macOS and Linux. Desktop packages
+include the waveform runtime on macOS ARM64 and Windows x64, with no compiler or
+FFmpeg installation required. Broad native overview comparisons were performed
+on Apple Silicon macOS; bundled-runtime checks do not establish every-song or
+physical-player parity on every platform.
 
 To install from a release artifact, download the wheel from this fork's Releases
 page and run `python -m pip install /path/to/rb2engine-0.6.1-py3-none-any.whl`.

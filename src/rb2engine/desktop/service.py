@@ -115,6 +115,7 @@ class DesktopService:
 
     def convert_drive(
         self, artwork: bool, confirmed: bool, replace: bool, fill_keys: bool = False,
+        fill_waveforms: bool = False,
     ) -> dict[str, Any]:
         with self._lock:
             if self._inspection is None:
@@ -126,8 +127,29 @@ class DesktopService:
             # Capture the inspected root, never accept a second arbitrary write target.
             checked = dict(self._inspection)
             return self._start(
-                "convert", lambda: self._convert(checked, artwork, replace, fill_keys),
+                "convert",
+                lambda: self._convert(checked, artwork, replace, fill_keys, fill_waveforms),
             )
+
+    def fill_waveforms(self, confirmed: bool) -> dict[str, Any]:
+        with self._lock:
+            if self._inspection is None or not self._inspection["existing"]:
+                return {"ok": False, "error": "inspect_first"}
+            if not confirmed:
+                return {"ok": False, "error": "close_apps"}
+            checked = dict(self._inspection)
+            return self._start("waveforms", lambda: self._waveforms(checked))
+
+    def _waveforms(self, checked: dict[str, Any]) -> None:
+        from rb2engine.desktop.waveforms import describe, fill
+
+        result = fill(Path(checked["path"]) / "Engine Library/Database2/m.db", self._progress)
+        self._update(status="warning" if result["failures"] else "waveforms_complete",
+                     details=describe(result))
+        with self._lock:
+            if self._state["result"] is None:
+                self._state["result"] = {}
+            self._state["result"]["waveforms"] = result
 
     def verify_drive(self) -> dict[str, Any]:
         with self._lock:
@@ -193,6 +215,7 @@ class DesktopService:
 
     def _convert(
         self, checked: dict[str, Any], artwork: bool, replace: bool, fill_keys: bool,
+        fill_waveforms: bool = False,
     ) -> None:
         root = Path(checked["path"])
         engine = root / "Engine Library"
@@ -206,6 +229,12 @@ class DesktopService:
             self._update(summary=None)
             raise FatalError("The rekordbox export changed. Inspect it again before converting.")
         report = ConversionReport()
+        waveform_context = None
+        if fill_waveforms:
+            from rb2engine.overviews.generator import create_context
+
+            self._progress("preparing waveforms", 0, 0)
+            waveform_context = create_context()
         if fill_keys and any(not (t.key_name or "").strip() for t in library.tracks.values()):
             from rb2engine.keyscan import file_hash, fill_missing_keys, resolve_analyzer
             from rb2engine.reader.scan import scan_drive
@@ -222,7 +251,8 @@ class DesktopService:
         self._progress("building library", 0, 0)
         database = build_library(library, drive_root=root, report=report,
                                  with_artwork=artwork, on_progress=self._progress,
-                                 backup_existing=True, allow_existing=replace)
+                                 backup_existing=True, allow_existing=replace,
+                                 target_schema=(3, 0, 2) if fill_waveforms else None)
         notices = list(library.warnings)
         analysis_text = ""
         if report.key_analysis is not None:
@@ -252,12 +282,35 @@ class DesktopService:
                      result={"database": str(database), "report": report_path,
                              "counters": counters, "verified": None},
                      details=report.render_text() + analysis_text + "\n\n" + "\n".join(notices))
+        if fill_waveforms:
+            from rb2engine.desktop.waveforms import describe, fill
+
+            try:
+                waveforms = fill(database, self._progress, context=waveform_context)
+                with self._lock:
+                    self._state["result"]["waveforms"] = waveforms
+                    self._state["details"] += "\n\n" + describe(waveforms)
+                if waveforms["failures"]:
+                    self._update(status="warning")
+            except Exception as exc:
+                logger.exception("Conversion saved but waveform completion failed")
+                with self._lock:
+                    self._state["details"] += (
+                        f"\n\nConversion saved; waveform completion failed: {exc}"
+                    )
+                self._update(status="warning")
 
     def _verify(self, checked: dict[str, Any]) -> None:
         from rb2engine.verify import verify_library
 
         self._progress("verifying", 0, 0)
         result = verify_library(Path(checked["path"]))
+        with self._lock:
+            waveform_result = (self._state.get("result") or {}).get("waveforms")
+        if waveform_result and waveform_result.get("batch"):
+            from rb2engine.overviews.publication import verify
+
+            waveform_result["verified"] = verify(waveform_result["batch"])
         self._update(status="verified" if result.exit_code == 0 else "warning",
                      details=result.render_text())
         with self._lock:

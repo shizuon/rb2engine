@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 waveforms = ["numpy>=1.26,<3"]  # BSD-3-Clause
-desktop = ["pywebview>=6.2.1,<7"]
+desktop = ["pywebview>=6.2.1,<7", "numpy>=1.26,<3"]
 
 [project.urls]
 Homepage = "https://github.com/shizuon/rb2engine"

@@ -44,7 +44,7 @@ Logs: `~/Library/Logs/rb2engine/desktop.log`.
 ## Conversion and recovery
 
 Finish exporting, then close rekordbox and Engine DJ. Choose the USB and click
-**Convert**. The confirmation is shown only when starting a conversion.
+**Convert**. Confirm that DJ software is closed before conversion or waveform publication.
 The export fingerprint is rechecked before writing. An existing Engine `m.db`
 is snapshotted with SQLite backup under the writer lock before rebuilding:
 
@@ -62,8 +62,33 @@ are available in the collapsed **Report**. The JSON report is written under
 `Engine Library/rb2engine-report.json`. Verification is a mechanical comparison;
 check actual playback on your equipment before a show.
 
-Waveform generation remains in the CLI and is not exposed by this GUI. The
-existing Windows waveform-generation limitation is unchanged.
+Enable **Fill Engine overview waveforms** to generate 1,024-point three-band and
+RGB whole-track overviews after conversion. The Windows x64 and macOS ARM64
+packages include FFmpeg, the AAC reader and the waveform processor; no compiler,
+Python, FFmpeg install or internet connection is needed for this feature.
+This does not create the scrolling high-resolution waveform.
+
+For an already converted drive, **Fill waveforms** adds missing overviews without
+rebuilding the library. Existing waveforms are preserved, including tracks with
+only one of the two overview formats. This operation requires Engine schema 3.0.2;
+conversion with the option enabled creates that schema. Unsupported audio or a
+generation failure leaves the waveform batch unpublished; successfully processed
+files remain cached for retry. The base conversion remains saved if a later
+waveform step fails, and **Report** identifies the failure.
+
+Before publication, the complete database state and audio hashes are checked.
+Metadata, keys, grids, cues, loops, playlists and existing waveform bytes are
+protected; only empty waveform payloads and the matching timing header are
+updated. Backups, the publication plan and recovery journal are retained under
+`Engine Library/rb2engine-waveforms/<batch>/`. The report contains that path.
+The existing CLI `rb2engine waveforms restore <batch>` can restore a batch.
+Publication verifies three-band/RGB readback and source hashes automatically.
+Do not eject the drive or start Engine DJ until processing finishes.
+
+The included FFmpeg build disables GPL/nonfree components and networking. Its
+LGPL license, complete corresponding source tarball, build configuration and
+build script are included under `licenses/FFmpeg`. Its dynamic libraries remain
+replaceable; this project's MIT license does not replace FFmpeg's license.
 
 ## Fill missing keys with OpenKeyScan
 
@@ -92,11 +117,13 @@ confirms the stored result, not musical accuracy; predictions can be wrong.
 uv sync --extra desktop --dev
 uv run rb2engine-gui
 uv pip install pyinstaller==6.22.3
+bash packaging/build_native.sh
 uv run pyinstaller --noconfirm packaging/desktop.spec
 uv run python packaging/archive_desktop.py windows-x64
 ```
 
 Use `macos-arm64` for the archive label when building on Apple Silicon.
-Build on the target operating system. The workflow packages the result and
+Build on the target operating system. On Windows, run the native build in an
+MSYS2 UCRT64 environment with GCC, make, pkgconf and nasm installed. The workflow packages the result and
 uploads its SHA-256 file plus separate native-renderer smoke evidence.
 The desktop dependency is optional; ordinary CLI installs do not require it.

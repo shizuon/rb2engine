@@ -6,11 +6,28 @@
 #include <stdint.h>
 #include <limits.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <wchar.h>
+#endif
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/samplefmt.h>
 
 static void fail(const char *message) { fprintf(stderr,"AAC reader: %s\n",message);exit(2); }
+#ifdef _WIN32
+static FILE *utf8_fopen(const char *path,const char *mode) {
+    int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path,-1,NULL,0);
+    if(!n)fail("invalid UTF-8 output path");
+    wchar_t *wide=malloc((size_t)n*sizeof(wchar_t));
+    if(!wide)fail("allocation failed");
+    MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path,-1,wide,n);
+    FILE *file=_wfopen(wide,strcmp(mode,"wb")==0 ? L"wb" : L"w");
+    free(wide);return file;
+}
+#define fopen utf8_fopen
+#define main reader_main
+#endif
 static int channels(AVFrame *f) {
 #if LIBAVUTIL_VERSION_MAJOR >= 57
     return f->ch_layout.nb_channels;
@@ -126,3 +143,19 @@ int main(int argc,char **argv) {
     av_frame_free(&frame);av_packet_free(&packet);avcodec_free_context(&ctx);avformat_close_input(&fc);
     return 0;
 }
+#ifdef _WIN32
+#undef main
+int wmain(int argc,wchar_t **wide) {
+    char **argv=calloc((size_t)argc+1,sizeof(char *));
+    if(!argv)fail("allocation failed");
+    for(int i=0;i<argc;i++) {
+        int n=WideCharToMultiByte(CP_UTF8,0,wide[i],-1,NULL,0,NULL,NULL);
+        argv[i]=malloc((size_t)n);
+        if(!n||!argv[i])fail("argument conversion failed");
+        WideCharToMultiByte(CP_UTF8,0,wide[i],-1,argv[i],n,NULL,NULL);
+    }
+    int result=reader_main(argc,argv);
+    for(int i=0;i<argc;i++)free(argv[i]);
+    free(argv);return result;
+}
+#endif

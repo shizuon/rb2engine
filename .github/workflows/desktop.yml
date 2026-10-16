@@ -15,7 +15,7 @@ jobs:
   desktop:
     name: ${{ matrix.label }} desktop
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -32,8 +32,35 @@ jobs:
       - name: Install desktop build dependencies
         run: uv sync --extra desktop --dev
       - run: uv pip install "pyinstaller==6.22.3"
+      - name: Install Windows native compiler
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: make diffutils nasm mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+      - name: Cache LGPL audio runtime
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/native-runtime
+            build/ffmpeg-8.0.3.tar.xz
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packaging/build_native.sh', 'src/rb2engine/overviews/*.c') }}
+      - name: Build Windows LGPL audio runtime
+        if: runner.os == 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash packaging/build_native.sh
+      - name: Build macOS LGPL audio runtime
+        if: runner.os == 'macOS' && steps.native-cache.outputs.cache-hit != 'true'
+        run: bash packaging/build_native.sh
       - name: Test conversion and path handling on this platform
         run: uv run pytest -q tests/unit/test_desktop.py tests/unit/test_keyscan.py tests/unit/test_paths_unicode.py tests/unit/test_library_lock.py
+      - name: Test bundled audio and native waveform reference
+        shell: bash
+        run: |
+          export RB2ENGINE_NATIVE_RUNTIME="$GITHUB_WORKSPACE/build/native-runtime"
+          uv run pytest -q tests/unit/test_desktop_waveforms.py tests/unit/test_overview_runtime.py tests/unit/test_overview_multistream.py tests/unit/test_overview_backend.py::test_original_frequency_sweep_matches_engine_native_reference
       - name: Build standalone application
         run: uv run pyinstaller --noconfirm packaging/desktop.spec
       - name: Create authored test export with a Unicode and URI-sensitive root
@@ -63,8 +90,8 @@ jobs:
           # Launch the actual windowed exe, not the Python source or a mocked bridge.
           $out = "$env:RUNNER_TEMP/desktop-smoke.json"
           $drive = "$env:RUNNER_TEMP/演出 USB #1 100%"
-          $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"") -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Packaged UI timed out' }
+          $process = Start-Process -FilePath 'dist/rb2engine/rb2engine.exe' -ArgumentList @('--smoke-test', "`"$out`"", '--smoke-drive', "`"$drive`"", '--smoke-waveforms') -PassThru
+          if (-not $process.WaitForExit(240000)) { $process.Kill(); throw 'Packaged UI timed out' }
           if (!(Test-Path $out)) { throw 'Packaged app did not produce smoke evidence' }
           Get-Content $out
           $result = Get-Content $out -Raw | ConvertFrom-Json
@@ -74,7 +101,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          dist/rb2engine.app/Contents/MacOS/rb2engine --smoke-test "$RUNNER_TEMP/desktop-smoke.json" --smoke-drive "$RUNNER_TEMP/演出 USB #1 100%"
+          dist/rb2engine.app/Contents/MacOS/rb2engine --smoke-test "$RUNNER_TEMP/desktop-smoke.json" --smoke-drive "$RUNNER_TEMP/演出 USB #1 100%" --smoke-waveforms
           cat "$RUNNER_TEMP/desktop-smoke.json"
       - name: Windows packaged UI with official OpenKeyScan analyzer
         if: runner.os == 'Windows'

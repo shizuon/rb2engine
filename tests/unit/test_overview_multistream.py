@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 
 import pytest
 
 
 def _native_dependencies() -> tuple[str, str]:
+    if os.environ.get("RB2ENGINE_NATIVE_RUNTIME"):
+        from rb2engine.overviews.decoder import executable
+
+        return executable("ffmpeg"), executable("ffprobe")
     system = platform.system()
     if system not in ("Darwin", "Linux"):
         pytest.skip("native waveform generation supports macOS/Linux")
@@ -58,19 +64,26 @@ def test_aac_first_stream_wins_over_later_default_stream(
 
     monkeypatch.setenv("RB2ENGINE_OVERVIEWS_BUILD_CACHE", str(tmp_path / "native-build"))
     audio = tmp_path / "two-audio-streams.m4a"
+    sources = []
+    for index, (rate, frequency, seconds) in enumerate(
+        ((first_rate, 440, 3), (default_rate, 880, 4))
+    ):
+        source = tmp_path / f"tone-{index}.wav"
+        time = np.arange(rate * seconds) / rate
+        pcm = np.rint(4096 * np.sin(2 * np.pi * frequency * time)).astype("<i2")
+        with wave.open(str(source), "wb") as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(2)
+            stream.setframerate(rate)
+            stream.writeframes(pcm.tobytes())
+        sources.append(source)
     subprocess.run(  # noqa: S603 - fixed synthetic signals; no shell
         [
             ffmpeg,
             "-v",
             "error",
-            "-f",
-            "lavfi",
-            "-i",
-            f"sine=frequency=440:sample_rate={first_rate}:duration=3",
-            "-f",
-            "lavfi",
-            "-i",
-            f"sine=frequency=880:sample_rate={default_rate}:duration=4",
+            "-i", str(sources[0]),
+            "-i", str(sources[1]),
             "-map",
             "0:a",
             "-map",

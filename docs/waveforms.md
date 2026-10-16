@@ -34,10 +34,17 @@ and dynamically linkable libavformat/libavcodec/libavutil, discoverable through
 pkg-config. `doctor --no-aac` checks the generic DSP without building the AAC
 helper; it does not establish that AAC generation will work.
 
-The backend builds on macOS and Linux. Native comparisons were performed on
-Apple Silicon macOS; Linux is not covered by that native validation. Windows
-waveform generation is explicitly unsupported, while base conversion remains
-available there. Other FFmpeg/compiler builds can change decoder rounding.
+Source installs compile the backend locally on macOS and Linux. The desktop
+packages bundle a prebuilt runtime on macOS ARM64 and Windows x64; see
+[Desktop app](desktop.md). Windows source development can use that same runtime
+via `RB2ENGINE_NATIVE_RUNTIME` after running `packaging/build_native.sh` in MSYS2
+UCRT64. It does not invoke a compiler on the end user's machine.
+
+The broad native comparisons were performed on Apple Silicon macOS; their
+results do not establish Linux or Windows parity for all songs. Bundled runtime
+tests separately exercise known audio, the frozen synthetic Engine waveform
+reference, publication and recovery. Other FFmpeg/compiler builds can change
+decoder rounding. No physical-player acceptance is claimed.
 
 An MP3 without a Xing/VBRI duration index can have a severely wrong bitrate-based
 duration estimate. When FFmpeg reports this estimate and it differs from decoded

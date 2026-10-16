@@ -4,11 +4,16 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
 
 root = Path(SPECPATH).parent
+runtime = root / 'build' / 'native-runtime'
+native_binaries = [(str(p), 'rb2engine/native_runtime') for p in runtime.iterdir()
+                   if p.is_file() and (p.suffix in ('.dll', '.dylib', '.exe') or p.name in ('ffmpeg', 'ffprobe', 'aac-reader'))]
+if not native_binaries:
+    raise RuntimeError('Build the waveform runtime first: bash packaging/build_native.sh')
 analysis = Analysis(
     [str(root / 'packaging' / 'desktop_entry.py')],
     pathex=[str(root / 'src')],
-    binaries=[],
-    datas=collect_data_files('rb2engine'),
+    binaries=native_binaries,
+    datas=collect_data_files('rb2engine', include_py_files=True),
     hiddenimports=['webview'],
     hookspath=[],
     excludes=['PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'tkinter', 'IPython', 'pytest', 'mutagen'],
