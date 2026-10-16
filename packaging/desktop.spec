@@ -1,5 +1,6 @@
 # Build from the repository root: pyinstaller --noconfirm packaging/desktop.spec
 import sys
+from importlib.metadata import version
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -25,7 +26,10 @@ exe = EXE(pyz, analysis.scripts, [], exclude_binaries=True, name='rb2engine',
           console=False, disable_windowed_traceback=False)
 collection = COLLECT(exe, analysis.binaries, analysis.datas, strip=False, upx=False, name='rb2engine')
 if sys.platform == 'darwin':
+    package_version = version('rb2engine')
     app = BUNDLE(collection, name='rb2engine.app', bundle_identifier='io.github.shizuon.rb2engine',
                  info_plist={'NSHighResolutionCapable': True,
+                             'CFBundleShortVersionString': package_version,
+                             'CFBundleVersion': package_version,
                              'NSRemovableVolumesUsageDescription': 'Read rekordbox exports and write Engine DJ libraries on your USB drive.',
                              'NSHumanReadableCopyright': 'MIT. See LICENSE and NOTICE.'})
